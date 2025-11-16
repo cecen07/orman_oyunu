@@ -20,33 +20,6 @@
             width: 100vw;
             height: 100vh;
         }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white;
-            font-size: 24px;
-            text-align: center;
-            background: rgba(0, 0, 0, 0.9);
-            padding: 30px;
-            border-radius: 10px;
-            z-index: 1000;
-        }
-        #loadingBar {
-            width: 300px;
-            height: 20px;
-            background: #333;
-            border-radius: 10px;
-            margin-top: 20px;
-            overflow: hidden;
-        }
-        #loadingProgress {
-            height: 100%;
-            background: linear-gradient(90deg, #4CAF50, #8BC34A);
-            width: 0%;
-            transition: width 0.3s;
-        }
         #ui {
             position: absolute;
             top: 20px;
@@ -57,7 +30,6 @@
             border-radius: 10px;
             font-size: 18px;
             z-index: 100;
-            display: none;
         }
         #ui div {
             margin: 10px 0;
@@ -85,7 +57,6 @@
             padding: 15px 30px;
             border-radius: 10px;
             text-align: center;
-            display: none;
         }
         #gameOver, #gameWon {
             position: absolute;
@@ -122,23 +93,9 @@
         button:hover {
             background: #45a049;
         }
-        .error-message {
-            color: #ff6b6b;
-            font-size: 14px;
-            margin-top: 10px;
-        }
     </style>
 </head>
 <body>
-    <div id="loading">
-        <div>🌲 Orman Yükleniyor... 🌲</div>
-        <div style="font-size: 16px; margin-top: 10px;" id="loadingText">3D Modeller hazırlanıyor...</div>
-        <div id="loadingBar">
-            <div id="loadingProgress"></div>
-        </div>
-        <div id="errorMsg" class="error-message" style="display:none;"></div>
-    </div>
-
     <canvas id="gameCanvas"></canvas>
     
     <div id="ui">
@@ -168,41 +125,15 @@
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script>
-        // ========================================
-        // DOSYA YOLLARI - BURADAN DEĞİŞTİR!
-        // ========================================
-        const MODEL_PATHS = {
-            player: './models/player.glb',
-            tree: './models/tree.glb',
-            enemyCin: './models/enemy-cin.glb',
-            enemyKurt: './models/enemy-kurt.glb',
-            gem: './models/gem.glb'
-        };
-
-        const SOUND_PATHS = {
-            gemCollect: './sounds/gem.mp3',
-            damage: './sounds/damage.mp3',
-            ambient: './sounds/ambient.mp3',
-            win: './sounds/win.mp3',
-            gameOver: './sounds/gameover.mp3'
-        };
-
         // Temel değişkenler
         let scene, camera, renderer;
         let player, playerVelocity = new THREE.Vector3();
         let enemies = [], gems = [], trees = [];
         let keys = {};
         let health = 100, gemsCollected = 0;
-        let gameActive = false;
+        let gameActive = true;
         let clock = new THREE.Clock();
-
-        // Model ve Ses
-        let loadedModels = {};
-        let sounds = {};
-        let audioListener, audioLoader;
-        let totalAssets = 0, loadedAssets = 0;
 
         // Mouse kontrol değişkenleri
         let mouseX = 0, mouseY = 0;
@@ -219,306 +150,71 @@
 
         // Başlangıç
         init();
+        animate();
 
-        function updateLoadingProgress() {
-            const progress = (loadedAssets / totalAssets) * 100;
-            document.getElementById('loadingProgress').style.width = progress + '%';
-            document.getElementById('loadingText').textContent = 
-                `Yükleniyor... ${Math.floor(progress)}% (${loadedAssets}/${totalAssets})`;
-        }
+        function init() {
+            // Scene oluştur
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
 
-        function showError(message) {
-            console.error(message);
-            const errorMsg = document.getElementById('errorMsg');
-            errorMsg.textContent = message;
-            errorMsg.style.display = 'block';
-        }
+            // Kamera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 5, 10);
 
-        async function init() {
-            try {
-                // Scene oluştur
-                scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x87CEEB);
-                scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
+            // Renderer
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
 
-                // Kamera
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 5, 10);
+            // Işıklandırma
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
 
-                // Renderer
-                renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.shadowMap.enabled = true;
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 20, 10);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            scene.add(directionalLight);
 
-                // Işıklandırma
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-                scene.add(ambientLight);
-
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(10, 20, 10);
-                directionalLight.castShadow = true;
-                directionalLight.shadow.camera.left = -50;
-                directionalLight.shadow.camera.right = 50;
-                directionalLight.shadow.camera.top = 50;
-                directionalLight.shadow.camera.bottom = -50;
-                scene.add(directionalLight);
-
-                // Zemin
-                const groundGeometry = new THREE.PlaneGeometry(100, 100);
-                const groundMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0x2d5016,
-                    roughness: 0.8
-                });
-                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-                ground.rotation.x = -Math.PI / 2;
-                ground.receiveShadow = true;
-                scene.add(ground);
-
-                // Ses sistemi
-                audioListener = new THREE.AudioListener();
-                camera.add(audioListener);
-                audioLoader = new THREE.AudioLoader();
-
-                // Asset sayısını hesapla
-                totalAssets = Object.keys(MODEL_PATHS).length + Object.keys(SOUND_PATHS).length;
-                
-                // Modelleri ve sesleri yükle
-                await loadAllAssets();
-
-                // Event listeners
-                window.addEventListener('resize', onWindowResize);
-                document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-                document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-                
-                document.addEventListener('click', () => {
-                    if (!isPointerLocked && gameActive) {
-                        renderer.domElement.requestPointerLock();
-                    }
-                });
-                
-                document.addEventListener('pointerlockchange', () => {
-                    isPointerLocked = document.pointerLockElement === renderer.domElement;
-                });
-                
-                document.addEventListener('mousemove', (e) => {
-                    if (isPointerLocked) {
-                        mouseX += e.movementX * 0.002;
-                        mouseY -= e.movementY * 0.002;
-                        mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
-                    }
-                });
-
-                // Yükleme ekranını gizle ve oyunu başlat
-                console.log('🎮 Tüm assetler hazır, oyun başlatılıyor!');
-                
-                // Önce bir kez render et (test için)
-                renderer.render(scene, camera);
-                console.log('Renderer test:', renderer);
-                console.log('Scene children:', scene.children.length);
-                
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('ui').style.display = 'block';
-                document.getElementById('instructions').style.display = 'block';
-
-                // Arkaplan müziği başlat
-                if (sounds.ambient) {
-                    sounds.ambient.setLoop(true);
-                    sounds.ambient.setVolume(0.3);
-                    sounds.ambient.play();
-                }
-
-                gameActive = true;
-                console.log('Animate başlatılıyor...');
-                animate();
-            } catch (error) {
-                showError('Oyun başlatılırken hata: ' + error.message);
-            }
-        }
-
-        async function loadAllAssets() {
-            const loader = new THREE.GLTFLoader();
-            
-            console.log('Model yükleme başlıyor...');
-            
-            // Oyuncu
-            try {
-                const playerGLTF = await loadModel(loader, MODEL_PATHS.player, 'Oyuncu');
-                if (playerGLTF) {
-                    loadedModels.player = playerGLTF.scene;
-                    player = loadedModels.player.clone();
-                    player.position.set(0, 0, 0);
-                    
-                    // Model boyutunu ayarla
-                    const box = new THREE.Box3().setFromObject(player);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scale = 2 / size.y; // 2 birim yükseklik için
-                    player.scale.set(scale, scale, scale);
-                    
-                    player.position.y = 1;
-                    player.castShadow = true;
-                    player.traverse((child) => {
-                        if (child.isMesh) {
-                            child.castShadow = true;
-                        }
-                    });
-                    scene.add(player);
-                    console.log('✅ Oyuncu modeli yüklendi');
-                } else {
-                    createFallbackPlayer();
-                }
-            } catch (error) {
-                console.warn('Oyuncu modeli yüklenemedi, yedek model kullanılıyor');
-                createFallbackPlayer();
-            }
-
-            // Ağaç modeli
-            try {
-                const treeGLTF = await loadModel(loader, MODEL_PATHS.tree, 'Ağaç');
-                if (treeGLTF) {
-                    loadedModels.tree = treeGLTF.scene;
-                    console.log('✅ Ağaç modeli yüklendi');
-                }
-            } catch (error) {
-                console.warn('Ağaç modeli yüklenemedi');
-            }
-
-            // Düşman modelleri
-            try {
-                const cinGLTF = await loadModel(loader, MODEL_PATHS.enemyCin, 'Orman Cini');
-                if (cinGLTF) {
-                    loadedModels.enemyCin = cinGLTF.scene;
-                    console.log('✅ Orman cini modeli yüklendi');
-                }
-            } catch (error) {
-                console.warn('Orman cini modeli yüklenemedi');
-            }
-
-            try {
-                const kurtGLTF = await loadModel(loader, MODEL_PATHS.enemyKurt, 'Gölge Kurdu');
-                if (kurtGLTF) {
-                    loadedModels.enemyKurt = kurtGLTF.scene;
-                    console.log('✅ Gölge kurdu modeli yüklendi');
-                }
-            } catch (error) {
-                console.warn('Gölge kurdu modeli yüklenemedi');
-            }
-
-            // Gem modeli
-            try {
-                const gemGLTF = await loadModel(loader, MODEL_PATHS.gem, 'Gem');
-                if (gemGLTF) {
-                    loadedModels.gem = gemGLTF.scene;
-                    console.log('✅ Gem modeli yüklendi');
-                }
-            } catch (error) {
-                console.warn('Gem modeli yüklenemedi');
-            }
-
-            // Sesleri yükle (opsiyonel)
-            try {
-                sounds.gemCollect = await loadSound(SOUND_PATHS.gemCollect, 'Gem sesi');
-                sounds.damage = await loadSound(SOUND_PATHS.damage, 'Hasar sesi');
-                sounds.ambient = await loadSound(SOUND_PATHS.ambient, 'Arkaplan müziği');
-                sounds.win = await loadSound(SOUND_PATHS.win, 'Kazanma sesi');
-                sounds.gameOver = await loadSound(SOUND_PATHS.gameOver, 'Kaybetme sesi');
-            } catch (error) {
-                console.warn('Bazı sesler yüklenemedi, sessiz devam ediliyor');
-            }
-
-            // Oyun elemanlarını oluştur
-            createTrees();
-            createEnemies();
-            createGems();
-            
-            console.log('🎮 Tüm assetler yüklendi, oyun başlıyor!');
-        }
-
-        function loadModel(loader, path, name) {
-            return new Promise((resolve) => {
-                console.log(`📦 Yükleniyor: ${name} (${path})`);
-                loader.load(
-                    path,
-                    (gltf) => {
-                        loadedAssets++;
-                        updateLoadingProgress();
-                        console.log(`✅ Yüklendi: ${name}`);
-                        resolve(gltf);
-                    },
-                    (progress) => {
-                        if (progress.lengthComputable) {
-                            const percent = (progress.loaded / progress.total * 100).toFixed(0);
-                            console.log(`⏳ ${name}: %${percent}`);
-                        }
-                    },
-                    (error) => {
-                        loadedAssets++;
-                        updateLoadingProgress();
-                        console.warn(`❌ Yüklenemedi: ${name} - ${error.message}`);
-                        resolve(null);
-                    }
-                );
+            // Zemin (Orman zemini)
+            const groundGeometry = new THREE.PlaneGeometry(100, 100);
+            const groundMaterial = new THREE.MeshStandardMaterial({ 
+                color: 0x2d5016,
+                roughness: 0.8
             });
-        }
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
 
-        function loadSound(path, name) {
-            return new Promise((resolve) => {
-                const sound = new THREE.Audio(audioListener);
-                audioLoader.load(
-                    path,
-                    (buffer) => {
-                        loadedAssets++;
-                        updateLoadingProgress();
-                        sound.setBuffer(buffer);
-                        console.log(`🔊 Ses yüklendi: ${name}`);
-                        resolve(sound);
-                    },
-                    undefined,
-                    (error) => {
-                        loadedAssets++;
-                        updateLoadingProgress();
-                        console.warn(`🔇 Ses yüklenemedi: ${name}`);
-                        resolve(null);
-                    }
-                );
-            });
-        }
-
-        function createFallbackPlayer() {
-            const geometry = new THREE.BoxGeometry(1, 2, 1);
-            const material = new THREE.MeshStandardMaterial({ color: 0x4169E1 });
-            player = new THREE.Mesh(geometry, material);
+            // Oyuncu (Mavi küp - sonra 3D model ile değiştirilecek)
+            const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
+            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x4169E1 });
+            player = new THREE.Mesh(playerGeometry, playerMaterial);
             player.position.set(0, 1, 0);
             player.castShadow = true;
             scene.add(player);
-            console.log('🟦 Yedek oyuncu modeli kullanıldı');
-        }
 
-        function createTrees() {
+            // Ağaçlar oluştur (Silindir - sonra 3D model)
             for (let i = 0; i < TREE_COUNT; i++) {
-                let tree;
+                const trunk = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.3, 0.4, 4, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x4a3728 })
+                );
+                const leaves = new THREE.Mesh(
+                    new THREE.SphereGeometry(2, 8, 8),
+                    new THREE.MeshStandardMaterial({ color: 0x228B22 })
+                );
                 
-                if (loadedModels.tree) {
-                    tree = loadedModels.tree.clone();
-                    // Ağaç boyutunu ayarla
-                    const box = new THREE.Box3().setFromObject(tree);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scale = 5 / size.y;
-                    tree.scale.set(scale, scale, scale);
-                } else {
-                    const trunk = new THREE.Mesh(
-                        new THREE.CylinderGeometry(0.3, 0.4, 4, 8),
-                        new THREE.MeshStandardMaterial({ color: 0x4a3728 })
-                    );
-                    const leaves = new THREE.Mesh(
-                        new THREE.SphereGeometry(2, 8, 8),
-                        new THREE.MeshStandardMaterial({ color: 0x228B22 })
-                    );
-                    tree = new THREE.Group();
-                    trunk.position.y = 2;
-                    leaves.position.y = 4;
-                    tree.add(trunk);
-                    tree.add(leaves);
-                }
+                const tree = new THREE.Group();
+                trunk.position.y = 2;
+                leaves.position.y = 4;
+                tree.add(trunk);
+                tree.add(leaves);
                 
                 tree.position.set(
                     (Math.random() - 0.5) * 80,
@@ -526,41 +222,19 @@
                     (Math.random() - 0.5) * 80
                 );
                 tree.castShadow = true;
-                tree.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                    }
-                });
                 tree.userData.isDangerous = true;
                 scene.add(tree);
                 trees.push(tree);
             }
-        }
 
-        function createEnemies() {
+            // Düşmanlar oluştur (Küre - sonra 3D model)
             for (let i = 0; i < ENEMY_COUNT; i++) {
                 const enemyType = Math.random() > 0.5 ? 'cin' : 'kurt';
-                let enemy;
+                const color = enemyType === 'cin' ? 0x00ff00 : 0x666666;
                 
-                if (enemyType === 'cin' && loadedModels.enemyCin) {
-                    enemy = loadedModels.enemyCin.clone();
-                    const box = new THREE.Box3().setFromObject(enemy);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scale = 1 / size.y;
-                    enemy.scale.set(scale, scale, scale);
-                } else if (enemyType === 'kurt' && loadedModels.enemyKurt) {
-                    enemy = loadedModels.enemyKurt.clone();
-                    const box = new THREE.Box3().setFromObject(enemy);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scale = 1.2 / size.y;
-                    enemy.scale.set(scale, scale, scale);
-                } else {
-                    const color = enemyType === 'cin' ? 0x00ff00 : 0x666666;
-                    enemy = new THREE.Mesh(
-                        new THREE.SphereGeometry(0.5, 16, 16),
-                        new THREE.MeshStandardMaterial({ color: color })
-                    );
-                }
+                const enemyGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+                const enemyMaterial = new THREE.MeshStandardMaterial({ color: color });
+                const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
                 
                 enemy.position.set(
                     (Math.random() - 0.5) * 80,
@@ -568,11 +242,6 @@
                     (Math.random() - 0.5) * 80
                 );
                 enemy.castShadow = true;
-                enemy.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                    }
-                });
                 enemy.userData.type = enemyType;
                 enemy.userData.velocity = new THREE.Vector3(
                     (Math.random() - 0.5) * 2,
@@ -583,45 +252,52 @@
                 scene.add(enemy);
                 enemies.push(enemy);
             }
-        }
 
-        function createGems() {
+            // Gemler oluştur (Oktahedron - sonra 3D model)
             for (let i = 0; i < GEM_COUNT; i++) {
-                let gem;
-                
-                if (loadedModels.gem) {
-                    gem = loadedModels.gem.clone();
-                    const box = new THREE.Box3().setFromObject(gem);
-                    const size = box.getSize(new THREE.Vector3());
-                    const scale = 0.8 / size.y;
-                    gem.scale.set(scale, scale, scale);
-                } else {
-                    gem = new THREE.Mesh(
-                        new THREE.OctahedronGeometry(0.4),
-                        new THREE.MeshStandardMaterial({ 
-                            color: 0xFFD700,
-                            emissive: 0xFFD700,
-                            emissiveIntensity: 0.5
-                        })
-                    );
-                }
+                const gemGeometry = new THREE.OctahedronGeometry(0.4);
+                const gemMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0xFFD700,
+                    emissive: 0xFFD700,
+                    emissiveIntensity: 0.5
+                });
+                const gem = new THREE.Mesh(gemGeometry, gemMaterial);
                 
                 gem.position.set(
                     (Math.random() - 0.5) * 80,
                     0.5,
                     (Math.random() - 0.5) * 80
                 );
-                gem.traverse((child) => {
-                    if (child.isMesh) {
-                        child.castShadow = true;
-                    }
-                });
                 gem.userData.value = Math.floor(Math.random() * 3) + 3;
                 gem.userData.rotationSpeed = Math.random() * 0.05 + 0.02;
                 
                 scene.add(gem);
                 gems.push(gem);
             }
+
+            // Event listeners
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
+            document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
+            
+            // Mouse kontrol
+            document.addEventListener('click', () => {
+                if (!isPointerLocked) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = document.pointerLockElement === renderer.domElement;
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isPointerLocked) {
+                    mouseX += e.movementX * 0.002;
+                    mouseY -= e.movementY * 0.002;
+                    mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
+                }
+            });
         }
 
         function animate() {
@@ -642,6 +318,7 @@
         }
 
         function updatePlayer(delta) {
+            // Hareket
             const moveSpeed = PLAYER_SPEED * delta;
             const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
             const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -663,10 +340,12 @@
                 player.position.add(right.multiplyScalar(moveSpeed));
             }
 
+            // Zıplama
             if (keys[' '] && player.position.y <= 1.01) {
                 playerVelocity.y = JUMP_FORCE;
             }
 
+            // Yerçekimi
             playerVelocity.y -= GRAVITY * delta;
             player.position.y += playerVelocity.y * delta;
 
@@ -675,6 +354,7 @@
                 playerVelocity.y = 0;
             }
 
+            // Sınırlar
             player.position.x = Math.max(-45, Math.min(45, player.position.x));
             player.position.z = Math.max(-45, Math.min(45, player.position.z));
         }
@@ -683,6 +363,7 @@
             enemies.forEach(enemy => {
                 enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta * 5));
                 
+                // Sınır kontrolü
                 if (Math.abs(enemy.position.x) > 45) {
                     enemy.userData.velocity.x *= -1;
                 }
@@ -690,6 +371,7 @@
                     enemy.userData.velocity.z *= -1;
                 }
                 
+                // Rotasyon
                 enemy.rotation.y += delta;
             });
         }
@@ -702,19 +384,18 @@
         }
 
         function checkCollisions() {
+            // Düşman çarpışması
             enemies.forEach(enemy => {
                 const distance = player.position.distanceTo(enemy.position);
                 if (distance < 1.5) {
                     health -= 0.5;
-                    if (sounds.damage && Math.random() > 0.95) {
-                        sounds.damage.play();
-                    }
                     if (health <= 0) {
                         gameOver();
                     }
                 }
             });
 
+            // Ağaç çarpışması
             trees.forEach(tree => {
                 const distance = player.position.distanceTo(tree.position);
                 if (distance < 2) {
@@ -725,6 +406,7 @@
                 }
             });
 
+            // Gem toplama
             for (let i = gems.length - 1; i >= 0; i--) {
                 const gem = gems[i];
                 const distance = player.position.distanceTo(gem.position);
@@ -732,10 +414,6 @@
                     gemsCollected += gem.userData.value;
                     scene.remove(gem);
                     gems.splice(i, 1);
-                    
-                    if (sounds.gemCollect) {
-                        sounds.gemCollect.play();
-                    }
                     
                     if (gemsCollected >= WIN_SCORE) {
                         gameWon();
@@ -755,3 +433,24 @@
             document.getElementById('healthText').textContent = Math.max(0, Math.floor(health));
             document.getElementById('healthBar').style.width = Math.max(0, health) + '%';
             document.getElementById('gemsText').textContent = gemsCollected;
+        }
+
+        function gameOver() {
+            gameActive = false;
+            document.getElementById('finalScore').textContent = gemsCollected;
+            document.getElementById('gameOver').style.display = 'block';
+        }
+
+        function gameWon() {
+            gameActive = false;
+            document.getElementById('gameWon').style.display = 'block';
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
