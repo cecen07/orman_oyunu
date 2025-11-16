@@ -1,456 +1,485 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Orman RPG</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            overflow: hidden;
-            background: #000;
-        }
-        #gameCanvas {
-            display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-        #ui {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 10px;
-            font-size: 18px;
-            z-index: 100;
-        }
-        #ui div {
-            margin: 10px 0;
-        }
-        .health-bar {
-            width: 200px;
-            height: 20px;
-            background: #333;
-            border-radius: 10px;
-            overflow: hidden;
-            margin-top: 5px;
-        }
-        .health-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #ff0000, #ff6666);
-            transition: width 0.3s;
-        }
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 30px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        #gameOver, #gameWon {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0, 0, 0, 0.95);
-            padding: 40px;
-            border-radius: 20px;
-            text-align: center;
-            display: none;
-            z-index: 200;
-        }
-        #gameOver h1 {
-            color: #ff0000;
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        #gameWon h1 {
-            color: #ffd700;
-            font-size: 48px;
-            margin-bottom: 20px;
-        }
-        button {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            font-size: 20px;
-            border-radius: 10px;
-            cursor: pointer;
-            margin-top: 20px;
-        }
-        button:hover {
-            background: #45a049;
-        }
-    </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>3D Orman RPG — Demo</title>
+<style>
+  html,body{height:100%;margin:0;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+  #overlay{
+    position: absolute;left:12px;top:12px;z-index:10;color:#fff;
+    background: rgba(0,0,0,0.35);padding:10px;border-radius:8px;
+  }
+  #info { font-size:14px; line-height:1.4; }
+  #startBtn{display:block;margin-top:8px;padding:8px 12px;border-radius:6px;background:#2d8cff;color:#fff;border:none;cursor:pointer}
+  canvas{display:block}
+</style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <div id="ui">
-        <div>❤️ Can: <span id="healthText">100</span></div>
-        <div class="health-bar">
-            <div class="health-fill" id="healthBar" style="width: 100%"></div>
-        </div>
-        <div>💎 Gemler: <span id="gemsText">0</span> / 100</div>
-    </div>
+<div id="overlay">
+  <div id="info">
+    <strong>Orman RPG (demo)</strong><br>
+    Gems: <span id="score">0</span> / <span id="winGoal">100</span><br>
+    Can: <span id="health">100</span><br>
+    Durum: <span id="status">Bekleniyor</span>
+  </div>
+  <button id="startBtn">Oyunu Başlat</button>
+</div>
 
-    <div id="instructions">
-        <strong>🎮 Kontroller:</strong><br>
-        W/A/S/D veya Ok Tuşları - Hareket | Space - Zıpla<br>
-        Mouse - Kamera | 💎 100 gem topla!
-    </div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
-    <div id="gameOver">
-        <h1>☠️ OYUN BİTTİ</h1>
-        <p style="color: white; font-size: 24px;">Toplam Gem: <span id="finalScore">0</span></p>
-        <button onclick="location.reload()">Tekrar Dene</button>
-    </div>
+<script>
+/*
+  3D Orman RPG - index.html
+  - Asset yolları: models/*.glb ve sounds/*.mp3 (aşağıda listelenmiştir)
+  - Bu dosya: tüm oyun döngüsünü, asset yüklemesini, düşman davranışlarını, collision mantığını içerir.
+*/
 
-    <div id="gameWon">
-        <h1>🏆 KAZANDIN!</h1>
-        <p style="color: white; font-size: 24px;">100 Gem Topladın! 🎉</p>
-        <button onclick="location.reload()">Tekrar Oyna</button>
-    </div>
+// ------------------- AYARLAR / SABİTLER -------------------
+const MODEL_PATHS = {
+  player: 'models/player.glb',
+  tree: 'models/tree.glb',
+  enemyCin: 'models/enemy-cin.glb',
+  enemyKurt: 'models/enemy-kurt.glb',
+  gem: 'models/gem.glb'
+};
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script>
-        // Temel değişkenler
-        let scene, camera, renderer;
-        let player, playerVelocity = new THREE.Vector3();
-        let enemies = [], gems = [], trees = [];
-        let keys = {};
-        let health = 100, gemsCollected = 0;
-        let gameActive = true;
-        let clock = new THREE.Clock();
+const SOUND_PATHS = {
+  gemCollect: 'sounds/gem.mp3',
+  damage: 'sounds/damage.mp3',
+  ambient: 'sounds/ambient.mp3',
+  win: 'sounds/win.mp3',
+  gameover: 'sounds/gameover.mp3'
+};
 
-        // Mouse kontrol değişkenleri
-        let mouseX = 0, mouseY = 0;
-        let isPointerLocked = false;
+const WIN_SCORE = 100;
+const GEM_COUNT = 25;
+const ENEMY_COUNT = 8;
+const PLAYER_MAX_HEALTH = 100;
+const PLAYER_BASE_SPEED = 6.0; // birim / saniye
 
-        // Sabitler
-        const PLAYER_SPEED = 5;
-        const JUMP_FORCE = 8;
-        const GRAVITY = 20;
-        const ENEMY_COUNT = 8;
-        const GEM_COUNT = 25;
-        const TREE_COUNT = 20;
-        const WIN_SCORE = 100;
+// ------------------- GLOBALLER -------------------
+let scene, camera, renderer, clock;
+let player, controls;
+let loadedModels = {};
+let sounds = {};
+let gems = [];
+let trees = [];
+let enemies = [];
+let gemsCollected = 0;
+let health = PLAYER_MAX_HEALTH;
+let statusEl, scoreEl, healthEl, winGoalEl, startBtn;
+let listener;
+let isRunning = false;
 
-        // Başlangıç
-        init();
-        animate();
+// ------------------- BASİT YARDIMCILER -------------------
+function $(id){ return document.getElementById(id); }
+function rand(min,max){ return min + Math.random()*(max-min); }
 
-        function init() {
-            // Scene oluştur
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 10, 100);
+// ------------------- INIT -------------------
+function init() {
+  // DOM elemanları
+  statusEl = $('status'); scoreEl = $('score'); healthEl = $('health'); winGoalEl = $('winGoal'); startBtn = $('startBtn');
+  winGoalEl.textContent = WIN_SCORE;
 
-            // Kamera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.set(0, 5, 10);
+  // Renderer + Scene
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
 
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('gameCanvas'), antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x9bd3ff); // hafif gökyüzü
+  clock = new THREE.Clock();
 
-            // Işıklandırma
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
+  // Camera
+  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+  camera.position.set(0, 2, 6);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(10, 20, 10);
-            directionalLight.castShadow = true;
-            directionalLight.shadow.camera.left = -50;
-            directionalLight.shadow.camera.right = 50;
-            directionalLight.shadow.camera.top = 50;
-            directionalLight.shadow.camera.bottom = -50;
-            scene.add(directionalLight);
+  // Audio listener
+  listener = new THREE.AudioListener();
+  camera.add(listener);
 
-            // Zemin (Orman zemini)
-            const groundGeometry = new THREE.PlaneGeometry(100, 100);
-            const groundMaterial = new THREE.MeshStandardMaterial({ 
-                color: 0x2d5016,
-                roughness: 0.8
-            });
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            ground.receiveShadow = true;
-            scene.add(ground);
+  // Lights
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.7);
+  hemi.position.set(0, 50, 0);
+  scene.add(hemi);
 
-            // Oyuncu (Mavi küp - sonra 3D model ile değiştirilecek)
-            const playerGeometry = new THREE.BoxGeometry(1, 2, 1);
-            const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x4169E1 });
-            player = new THREE.Mesh(playerGeometry, playerMaterial);
-            player.position.set(0, 1, 0);
-            player.castShadow = true;
-            scene.add(player);
+  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  dir.position.set(5, 20, 10);
+  dir.castShadow = true;
+  dir.shadow.camera.top = 10; dir.shadow.camera.bottom = -10;
+  dir.shadow.camera.left = -10; dir.shadow.camera.right = 10;
+  scene.add(dir);
 
-            // Ağaçlar oluştur (Silindir - sonra 3D model)
-            for (let i = 0; i < TREE_COUNT; i++) {
-                const trunk = new THREE.Mesh(
-                    new THREE.CylinderGeometry(0.3, 0.4, 4, 8),
-                    new THREE.MeshStandardMaterial({ color: 0x4a3728 })
-                );
-                const leaves = new THREE.Mesh(
-                    new THREE.SphereGeometry(2, 8, 8),
-                    new THREE.MeshStandardMaterial({ color: 0x228B22 })
-                );
-                
-                const tree = new THREE.Group();
-                trunk.position.y = 2;
-                leaves.position.y = 4;
-                tree.add(trunk);
-                tree.add(leaves);
-                
-                tree.position.set(
-                    (Math.random() - 0.5) * 80,
-                    0,
-                    (Math.random() - 0.5) * 80
-                );
-                tree.castShadow = true;
-                tree.userData.isDangerous = true;
-                scene.add(tree);
-                trees.push(tree);
-            }
+  // Ground (simple)
+  const groundGeo = new THREE.PlaneGeometry(200,200);
+  const groundMat = new THREE.MeshStandardMaterial({ color:0x1e6b2e });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
+  ground.rotation.x = -Math.PI/2;
+  ground.receiveShadow = true;
+  scene.add(ground);
 
-            // Düşmanlar oluştur (Küre - sonra 3D model)
-            for (let i = 0; i < ENEMY_COUNT; i++) {
-                const enemyType = Math.random() > 0.5 ? 'cin' : 'kurt';
-                const color = enemyType === 'cin' ? 0x00ff00 : 0x666666;
-                
-                const enemyGeometry = new THREE.SphereGeometry(0.5, 16, 16);
-                const enemyMaterial = new THREE.MeshStandardMaterial({ color: color });
-                const enemy = new THREE.Mesh(enemyGeometry, enemyMaterial);
-                
-                enemy.position.set(
-                    (Math.random() - 0.5) * 80,
-                    0.5,
-                    (Math.random() - 0.5) * 80
-                );
-                enemy.castShadow = true;
-                enemy.userData.type = enemyType;
-                enemy.userData.velocity = new THREE.Vector3(
-                    (Math.random() - 0.5) * 2,
-                    0,
-                    (Math.random() - 0.5) * 2
-                );
-                
-                scene.add(enemy);
-                enemies.push(enemy);
-            }
+  // Player placeholder (position & logical object)
+  player = new THREE.Object3D();
+  player.position.set(0, 1.0, 0);
+  scene.add(player);
 
-            // Gemler oluştur (Oktahedron - sonra 3D model)
-            for (let i = 0; i < GEM_COUNT; i++) {
-                const gemGeometry = new THREE.OctahedronGeometry(0.4);
-                const gemMaterial = new THREE.MeshStandardMaterial({ 
-                    color: 0xFFD700,
-                    emissive: 0xFFD700,
-                    emissiveIntensity: 0.5
-                });
-                const gem = new THREE.Mesh(gemGeometry, gemMaterial);
-                
-                gem.position.set(
-                    (Math.random() - 0.5) * 80,
-                    0.5,
-                    (Math.random() - 0.5) * 80
-                );
-                gem.userData.value = Math.floor(Math.random() * 3) + 3;
-                gem.userData.rotationSpeed = Math.random() * 0.05 + 0.02;
-                
-                scene.add(gem);
-                gems.push(gem);
-            }
+  // Controls (pointer lock)
+  controls = new THREE.PointerLockControls(camera, document.body);
+  startBtn.addEventListener('click', () => {
+    controls.lock();
+    if (!isRunning) startGame();
+  });
+  controls.addEventListener('lock', () => {
+    statusEl.textContent = 'Oyun başladı';
+  });
+  controls.addEventListener('unlock', () => {
+    statusEl.textContent = 'Durdu (pointer unlock)';
+  });
 
-            // Event listeners
-            window.addEventListener('resize', onWindowResize);
-            document.addEventListener('keydown', (e) => keys[e.key.toLowerCase()] = true);
-            document.addEventListener('keyup', (e) => keys[e.key.toLowerCase()] = false);
-            
-            // Mouse kontrol
-            document.addEventListener('click', () => {
-                if (!isPointerLocked) {
-                    renderer.domElement.requestPointerLock();
-                }
-            });
-            
-            document.addEventListener('pointerlockchange', () => {
-                isPointerLocked = document.pointerLockElement === renderer.domElement;
-            });
-            
-            document.addEventListener('mousemove', (e) => {
-                if (isPointerLocked) {
-                    mouseX += e.movementX * 0.002;
-                    mouseY -= e.movementY * 0.002;
-                    mouseY = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, mouseY));
-                }
-            });
+  // Resize handler
+  window.addEventListener('resize', onWindowResize, false);
+
+  // Start asset loading
+  loadAllAssets().then(setupWorld).catch(err => {
+    console.error('Asset yükleme hatası:', err);
+    setupWorld(); // yine de dene
+  });
+}
+
+function onWindowResize(){
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// ------------------- ASSET YÜKLEME -------------------
+function loadGLTF(url){
+  return new Promise((res, rej) => {
+    const loader = new THREE.GLTFLoader();
+    loader.load(url, gltf => res(gltf.scene), err => rej(err));
+  });
+}
+
+function loadAudioBuffer(url){
+  return new Promise((resolve, reject) => {
+    const audioLoader = new THREE.AudioLoader();
+    audioLoader.load(url, buffer => resolve(buffer), undefined, err => reject(err));
+  });
+}
+
+async function loadAllAssets(){
+  const promises = [];
+  // Modeller
+  for (const [k, path] of Object.entries(MODEL_PATHS)){
+    promises.push(
+      loadGLTF(path).then(obj => { loadedModels[k] = obj; }).catch(err => {
+        console.warn('Model yüklenemedi:', path, err);
+        loadedModels[k] = null; // fallback
+      })
+    );
+  }
+
+  // Sesler
+  for (const [k, path] of Object.entries(SOUND_PATHS)){
+    promises.push(
+      loadAudioBuffer(path).then(buffer => {
+        const audio = new THREE.Audio(listener);
+        audio.setBuffer(buffer);
+        // loop ambiyans haricinde auto play kontrolü oyunun başında yapılır
+        if (k === 'ambient') audio.setLoop(true);
+        sounds[k] = audio;
+      }).catch(err => {
+        console.warn('Ses yüklenemedi:', path, err);
+        sounds[k] = null;
+      })
+    );
+  }
+
+  return Promise.all(promises);
+}
+
+// ------------------- DÜNYA KURULUMU (MODELS -> sahne yerleştirme) -------------------
+function setupWorld() {
+  // Player model (optional)
+  if (loadedModels.player){
+    const pm = loadedModels.player.clone();
+    pm.scale.setScalar(1.0);
+    pm.traverse(n => { if (n.isMesh) n.castShadow = true; });
+    player.add(pm);
+  } else {
+    // fallback simple capsule
+    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.8, 4, 8), new THREE.MeshStandardMaterial({color:0x0077ff}));
+    mesh.castShadow = true;
+    player.add(mesh);
+  }
+
+  // Trees
+  for (let i=0;i<40;i++){
+    const x = rand(-45,45), z = rand(-45,45);
+    let tree;
+    if (loadedModels.tree){
+      tree = loadedModels.tree.clone();
+      tree.scale.setScalar(rand(0.8,1.4));
+    } else {
+      tree = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,3,8), new THREE.MeshStandardMaterial({color:0x654321}));
+      const leaf = new THREE.Mesh(new THREE.SphereGeometry(1.2,8,8), new THREE.MeshStandardMaterial({color:0x2e8b57}));
+      leaf.position.y = 1.8; tree.add(leaf);
+    }
+    tree.position.set(x, 0.0, z);
+    tree.castShadow = true;
+    tree.userData = tree.userData || {};
+    tree.userData._playerInside = false;
+    trees.push(tree);
+    scene.add(tree);
+  }
+
+  // Gems
+  for (let i=0;i<GEM_COUNT;i++){
+    const x = rand(-40,40), z = rand(-40,40);
+    let gem;
+    if (loadedModels.gem){
+      gem = loadedModels.gem.clone();
+      gem.scale.setScalar(0.6);
+    } else {
+      gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({emissive: new THREE.Color(0x00ffcc), metalness:0.3}));
+    }
+    gem.position.set(x, 0.6, z);
+    gem.userData = { value: Math.round(rand(3,5)) };
+    gems.push(gem);
+    scene.add(gem);
+  }
+
+  // Enemies
+  createEnemies();
+
+  // Play ambient if loaded
+  if (sounds.ambient) {
+    sounds.ambient.setVolume(0.25);
+    sounds.ambient.play();
+  }
+
+  // UI update
+  updateUI();
+
+  // Start render loop (but game starts on pointer lock)
+  animate();
+}
+
+// ------------------- OYUN BAŞLAMA / DURUM -------------------
+function startGame() {
+  isRunning = true;
+  gemsCollected = 0;
+  health = PLAYER_MAX_HEALTH;
+  scoreEl.textContent = gemsCollected;
+  healthEl.textContent = health;
+  statusEl.textContent = 'Oyun çalışıyor';
+  // reset objects: remove extra enemies/gems if needed (simple approach: reload scene)
+  // (burada mevcut scene öğeleri korunur)
+}
+
+// ------------------- DÜŞMAN OLUŞTURMA / GÜNCELLEME -------------------
+function createEnemies(){
+  enemies.forEach(e => scene.remove(e));
+  enemies = [];
+  for (let i = 0; i < ENEMY_COUNT; i++){
+    const type = Math.random() > 0.5 ? 'kurt' : 'cin';
+    let e;
+    if (type === 'cin' && loadedModels.enemyCin){
+      e = loadedModels.enemyCin.clone();
+      e.scale.setScalar(0.9);
+    } else if (type === 'kurt' && loadedModels.enemyKurt){
+      e = loadedModels.enemyKurt.clone();
+      e.scale.setScalar(0.9);
+    } else {
+      const c = type === 'kurt' ? 0x333333 : 0x2e8b57;
+      e = new THREE.Mesh(new THREE.SphereGeometry(0.6,12,12), new THREE.MeshStandardMaterial({color:c}));
+    }
+    e.position.set(rand(-40,40), 0.6, rand(-40,40));
+    e.castShadow = true;
+    e.userData = {
+      type: type,
+      baseSpeed: type === 'kurt' ? 2.2 : 1.5,
+      speed: 0,
+      damage: type === 'kurt' ? 12 : 6,
+      detectionRadius: type === 'kurt' ? 8 : 12,
+      attackCooldown: 1.2,
+      lastAttack: -999,
+      patrolDir: new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize(),
+      lastSprint: -999,
+      sprintCooldown: 5 + Math.random()*6,
+      lastTeleport: -999,
+      teleportCooldown: 6 + Math.random()*8
+    };
+    enemies.push(e);
+    scene.add(e);
+  }
+}
+
+function updateEnemies(delta){
+  const elapsed = clock.getElapsedTime();
+  const difficultyScale = 1 + (gemsCollected / 50) + (elapsed / 120);
+
+  enemies.forEach(enemy => {
+    enemy.userData.speed = enemy.userData.baseSpeed * difficultyScale;
+    const toPlayer = new THREE.Vector3().subVectors(player.position, enemy.position);
+    const dist = toPlayer.length();
+
+    if (dist < enemy.userData.detectionRadius){
+      // detected player
+      if (enemy.userData.type === 'kurt'){
+        // chase + possible sprint
+        if (elapsed - enemy.userData.lastSprint > enemy.userData.sprintCooldown && Math.random() < 0.25){
+          enemy.userData.lastSprint = elapsed;
+          const sprintVel = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 3);
+          enemy.userData.velocity = sprintVel;
+        } else {
+          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed);
         }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            if (!gameActive) return;
-            
-            const delta = clock.getDelta();
-            
-            updatePlayer(delta);
-            updateEnemies(delta);
-            updateGems(delta);
-            checkCollisions();
-            updateCamera();
-            updateUI();
-            
-            renderer.render(scene, camera);
+      } else {
+        // cin: teleport sometimes if far; if near, pulse/retreat
+        if (dist > 6){
+          if (elapsed - enemy.userData.lastTeleport > enemy.userData.teleportCooldown && Math.random() < 0.06){
+            enemy.userData.lastTeleport = elapsed;
+            const angle = Math.random()*Math.PI*2;
+            const offset = new THREE.Vector3(Math.cos(angle)*2 + rand(-1,1), 0, Math.sin(angle)*2 + rand(-1,1));
+            enemy.position.copy(player.position).add(offset);
+          }
+          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 0.9);
+        } else {
+          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(-enemy.userData.speed*0.5);
         }
+      }
+    } else {
+      // patrol
+      if (!enemy.userData.velocity || enemy.userData.velocity.length() < 0.01){
+        enemy.userData.velocity = enemy.userData.patrolDir.clone().multiplyScalar(enemy.userData.speed*0.4);
+      }
+      if (Math.random() < 0.004) {
+        enemy.userData.patrolDir = new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize();
+        enemy.userData.velocity = enemy.userData.patrolDir.clone().multiplyScalar(enemy.userData.speed*0.4);
+      }
+    }
 
-        function updatePlayer(delta) {
-            // Hareket
-            const moveSpeed = PLAYER_SPEED * delta;
-            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
-            forward.y = 0;
-            right.y = 0;
-            forward.normalize();
-            right.normalize();
+    if (enemy.userData.velocity) enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta));
 
-            if (keys['w'] || keys['arrowup']) {
-                player.position.add(forward.multiplyScalar(moveSpeed));
-            }
-            if (keys['s'] || keys['arrowdown']) {
-                player.position.add(forward.multiplyScalar(-moveSpeed));
-            }
-            if (keys['a'] || keys['arrowleft']) {
-                player.position.add(right.multiplyScalar(-moveSpeed));
-            }
-            if (keys['d'] || keys['arrowright']) {
-                player.position.add(right.multiplyScalar(moveSpeed));
-            }
+    // bounds
+    if (Math.abs(enemy.position.x) > 48) enemy.position.x = THREE.MathUtils.clamp(enemy.position.x, -48, 48);
+    if (Math.abs(enemy.position.z) > 48) enemy.position.z = THREE.MathUtils.clamp(enemy.position.z, -48, 48);
 
-            // Zıplama
-            if (keys[' '] && player.position.y <= 1.01) {
-                playerVelocity.y = JUMP_FORCE;
-            }
+    // small rotate to feel alive
+    enemy.rotation.y += delta * 0.5 * (enemy.userData.type === 'kurt' ? 1.4 : 0.8);
+  });
+}
 
-            // Yerçekimi
-            playerVelocity.y -= GRAVITY * delta;
-            player.position.y += playerVelocity.y * delta;
+// ------------------- PLAYER GÜNCELLEME -------------------
+let move = { forward:0, right:0 };
+let playerLastHurt = -999;
+const PLAYER_INVULN = 1.0;
 
-            if (player.position.y < 1) {
-                player.position.y = 1;
-                playerVelocity.y = 0;
-            }
+function updatePlayer(delta){
+  // input (keyboard)
+  // simple WASD
+  // event listeners set at bottom
+  const elapsed = clock.getElapsedTime();
+  let moveSpeed = PLAYER_BASE_SPEED;
+  if (player.userData && player.userData.slowUntil && elapsed < player.userData.slowUntil){
+    moveSpeed *= 0.45;
+  }
+  const velocity = new THREE.Vector3();
+  if (move.forward !== 0) {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0; dir.normalize();
+    velocity.add(dir.multiplyScalar(move.forward));
+  }
+  if (move.right !== 0){
+    const right = new THREE.Vector3();
+    camera.getWorldDirection(right);
+    right.y = 0;
+    right.normalize();
+    // right vector:
+    right.cross(camera.up);
+    velocity.add(right.multiplyScalar(move.right));
+  }
+  if (velocity.length() > 0) {
+    velocity.normalize();
+    player.position.add(velocity.multiplyScalar(moveSpeed * delta));
+    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
+  } else {
+    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
+  }
 
-            // Sınırlar
-            player.position.x = Math.max(-45, Math.min(45, player.position.x));
-            player.position.z = Math.max(-45, Math.min(45, player.position.z));
-        }
+  // limit area
+  player.position.x = THREE.MathUtils.clamp(player.position.x, -49, 49);
+  player.position.z = THREE.MathUtils.clamp(player.position.z, -49, 49);
+}
 
-        function updateEnemies(delta) {
-            enemies.forEach(enemy => {
-                enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta * 5));
-                
-                // Sınır kontrolü
-                if (Math.abs(enemy.position.x) > 45) {
-                    enemy.userData.velocity.x *= -1;
-                }
-                if (Math.abs(enemy.position.z) > 45) {
-                    enemy.userData.velocity.z *= -1;
-                }
-                
-                // Rotasyon
-                enemy.rotation.y += delta;
-            });
-        }
+// ------------------- ÇARPIŞMA / ETKİLEŞİM -------------------
+function checkCollisions(){
+  const elapsed = clock.getElapsedTime();
 
-        function updateGems(delta) {
-            gems.forEach(gem => {
-                gem.rotation.y += gem.userData.rotationSpeed;
-                gem.position.y = 0.5 + Math.sin(Date.now() * 0.001 + gem.position.x) * 0.2;
-            });
-        }
+  // enemies -> player
+  enemies.forEach(enemy => {
+    const dist = enemy.position.distanceTo(player.position);
+    if (dist < 1.4){
+      if (elapsed - playerLastHurt > PLAYER_INVULN && elapsed - enemy.userData.lastAttack > enemy.userData.attackCooldown){
+        let damage = enemy.userData.damage;
+        damage = Math.round(damage * (1 + gemsCollected/100)); // zorluk faktörü
+        health -= damage;
+        enemy.userData.lastAttack = elapsed;
+        playerLastHurt = elapsed;
+        if (sounds.damage) { sounds.damage.setVolume(0.9); sounds.damage.play(); }
+        updateUI();
+        if (health <= 0) gameOver();
+      }
+    }
+  });
 
-        function checkCollisions() {
-            // Düşman çarpışması
-            enemies.forEach(enemy => {
-                const distance = player.position.distanceTo(enemy.position);
-                if (distance < 1.5) {
-                    health -= 0.5;
-                    if (health <= 0) {
-                        gameOver();
-                    }
-                }
-            });
+  // trees -> hazard zone (ilk girişte hasar + yavaşlama)
+  trees.forEach(tree => {
+    const dist = tree.position.distanceTo(player.position);
+    if (!tree.userData._playerInside && dist < 2.0){
+      tree.userData._playerInside = true;
+      const elapsed = clock.getElapsedTime();
+      health -= 6;
+      if (!player.userData) player.userData = {};
+      player.userData.slowUntil = elapsed + 2.0;
+      if (sounds.damage) { sounds.damage.setVolume(0.6); sounds.damage.play(); }
+      updateUI();
+      if (health <= 0) gameOver();
+    } else if (tree.userData._playerInside && dist >= 2.4){
+      tree.userData._playerInside = false;
+    }
+  });
 
-            // Ağaç çarpışması
-            trees.forEach(tree => {
-                const distance = player.position.distanceTo(tree.position);
-                if (distance < 2) {
-                    health -= 0.3;
-                    if (health <= 0) {
-                        gameOver();
-                    }
-                }
-            });
+  // gems -> collect
+  for (let i = gems.length -1; i >= 0; i--){
+    const g = gems[i];
+    if (g.position.distanceTo(player.position) < 1.2){
+      gemsCollected += g.userData.value || 4;
+      scene.remove(g);
+      gems.splice(i,1);
+      if (sounds.gemCollect) { sounds.gemCollect.setVolume(0.9); sounds.gemCollect.play(); }
+      updateUI();
+      if (gemsCollected >= WIN_SCORE) gameWon();
+    }
+  }
+}
 
-            // Gem toplama
-            for (let i = gems.length - 1; i >= 0; i--) {
-                const gem = gems[i];
-                const distance = player.position.distanceTo(gem.position);
-                if (distance < 1) {
-                    gemsCollected += gem.userData.value;
-                    scene.remove(gem);
-                    gems.splice(i, 1);
-                    
-                    if (gemsCollected >= WIN_SCORE) {
-                        gameWon();
-                    }
-                }
-            }
-        }
+// ------------------- OYUN SONU / GALİBİYET -------------------
+function gameWon(){
+  statusEl.textContent = 'Kazandın! 🎉';
+  isRunning = false;
+  if (sounds.win) sounds.win.play();
+  // pointer unlock to allow user to restart
+  controls.unlock();
+}
 
-        function updateCamera() {
-            camera.position.x = player.position.x + Math.sin(mouseX) * 10;
-            camera.position.y = player.position.y + 5 + Math.sin(mouseY) * 5;
-            camera.position.z = player.position.z + Math.cos(mouseX) * 10;
-            camera.lookAt(player.position);
-        }
-
-        function updateUI() {
-            document.getElementById('healthText').textContent = Math.max(0, Math.floor(health));
-            document.getElementById('healthBar').style.width = Math.max(0, health) + '%';
-            document.getElementById('gemsText').textContent = gemsCollected;
-        }
-
-        function gameOver() {
-            gameActive = false;
-            document.getElementById('finalScore').textContent = gemsCollected;
-            document.getElementById('gameOver').style.display = 'block';
-        }
-
-        function gameWon() {
-            gameActive = false;
-            document.getElementById('gameWon').style.display = 'block';
-        }
-
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-    </script>
-</body>
-</html>
+function gameOver(){
+  statusEl.textContent = 'Oyunu kaybettin.';
+  isRunning = false;
+  if (sounds
