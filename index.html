@@ -2,42 +2,83 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>3D Orman RPG — Demo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>3D Orman RPG — Mobil & Masaüstü</title>
 <style>
-  html,body{height:100%;margin:0;overflow:hidden;font-family:Arial,Helvetica,sans-serif}
+  html,body{height:100%;margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:#08121a;color:#fff;overflow:hidden}
   #overlay{
-    position: absolute;left:12px;top:12px;z-index:10;color:#fff;
-    background: rgba(0,0,0,0.35);padding:10px;border-radius:8px;
+    position: absolute; left:12px; top:12px; z-index:40; 
+    background: rgba(0,0,0,0.45); padding:12px; border-radius:10px; 
+    min-width:220px;
   }
   #info { font-size:14px; line-height:1.4; }
-  #startBtn{display:block;margin-top:8px;padding:8px 12px;border-radius:6px;background:#2d8cff;color:#fff;border:none;cursor:pointer}
+  #startBtn, #restartBtn {
+    display:block; margin-top:8px; padding:10px 14px; border-radius:8px; border:none; cursor:pointer;
+    background: linear-gradient(180deg,#2ea7ff,#0066cc); color:#fff; font-weight:600;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+  #statusSmall { font-size:12px; opacity:0.9; margin-top:6px; }
   canvas{display:block}
+
+  /* Joystick container */
+  #joystick {
+    position: fixed; left:18px; bottom:18px; z-index:35; width:140px; height:140px;
+    border-radius:50%; touch-action:none;
+    display:none; /* mobilde gösterilecek */
+  }
+  #joyBg {
+    position:absolute; width:100%; height:100%; border-radius:50%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border: 2px solid rgba(255,255,255,0.06);
+  }
+  #joyThumb {
+    position:absolute; width:54px; height:54px; left:43px; top:43px; border-radius:50%;
+    background: rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center;
+    font-size:12px; color:#fff;
+    touch-action:none;
+  }
+
+  /* camera drag zone */
+  #camZone {
+    position: fixed; right:8px; bottom:8px; z-index:35; width:42%; height:48%;
+    border-radius:12px; background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.02));
+    touch-action:none; display:none;
+  }
+
+  /* mobile adjustments */
+  @media (pointer: coarse) {
+    #joystick, #camZone { display:block; }
+    #overlay { left:10px; right:10px; top:8px; min-width:unset; }
+    #info { font-size:15px; }
+    #startBtn { padding:12px 16px; font-size:16px; }
+  }
 </style>
 </head>
 <body>
-<div id="overlay">
-  <div id="info">
-    <strong>Orman RPG (demo)</strong><br>
-    Gems: <span id="score">0</span> / <span id="winGoal">100</span><br>
-    Can: <span id="health">100</span><br>
-    Durum: <span id="status">Bekleniyor</span>
+  <div id="overlay">
+    <div id="info">
+      <strong>Orman RPG — Demo</strong><br>
+      Gems: <span id="score">0</span> / <span id="winGoal">100</span><br>
+      Can: <span id="health">100</span><br>
+      Durum: <span id="status">Hazır</span><br>
+    </div>
+    <button id="startBtn">Oyunu Başlat</button>
+    <button id="restartBtn" style="display:none;margin-top:6px;background:#ff5f5f;">Tekrar Başlat</button>
+    <div id="statusSmall">Kontroller: WASD veya sol joystick (mobil). Kamera: fare ile bak veya sağ bölgeyi sürükle.</div>
   </div>
-  <button id="startBtn">Oyunu Başlat</button>
-</div>
+
+  <div id="joystick" aria-hidden="true">
+    <div id="joyBg"></div>
+    <div id="joyThumb">●</div>
+  </div>
+  <div id="camZone" aria-hidden="true"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
-/*
-  3D Orman RPG - index.html
-  - Asset yolları: models/*.glb ve sounds/*.mp3 (aşağıda listelenmiştir)
-  - Bu dosya: tüm oyun döngüsünü, asset yüklemesini, düşman davranışlarını, collision mantığını içerir.
-*/
-
-// ------------------- AYARLAR / SABİTLER -------------------
+/* ---------- AYARLAR ---------- */
 const MODEL_PATHS = {
   player: 'models/player.glb',
   tree: 'models/tree.glb',
@@ -45,7 +86,6 @@ const MODEL_PATHS = {
   enemyKurt: 'models/enemy-kurt.glb',
   gem: 'models/gem.glb'
 };
-
 const SOUND_PATHS = {
   gemCollect: 'sounds/gem.mp3',
   damage: 'sounds/damage.mp3',
@@ -58,289 +98,148 @@ const WIN_SCORE = 100;
 const GEM_COUNT = 25;
 const ENEMY_COUNT = 8;
 const PLAYER_MAX_HEALTH = 100;
-const PLAYER_BASE_SPEED = 6.0; // birim / saniye
+const PLAYER_BASE_SPEED = 6.0;
 
-// ------------------- GLOBALLER -------------------
+/* ---------- GLOBALS ---------- */
 let scene, camera, renderer, clock;
 let player, controls;
-let loadedModels = {};
-let sounds = {};
-let gems = [];
-let trees = [];
-let enemies = [];
-let gemsCollected = 0;
-let health = PLAYER_MAX_HEALTH;
-let statusEl, scoreEl, healthEl, winGoalEl, startBtn;
-let listener;
+let loadedModels = {}, sounds = {};
+let gems = [], trees = [], enemies = [];
+let gemsCollected = 0, health = PLAYER_MAX_HEALTH;
 let isRunning = false;
+let isPointerLocked = false;
+let statusEl, scoreEl, healthEl, winGoalEl, startBtn, restartBtn;
+let listener;
+let move = { forward:0, right:0 };
+let playerLastHurt = -999;
+const PLAYER_INVULN = 1.0;
 
-// ------------------- BASİT YARDIMCILER -------------------
-function $(id){ return document.getElementById(id); }
+/* ---------- UTILS ---------- */
+const $ = id => document.getElementById(id);
 function rand(min,max){ return min + Math.random()*(max-min); }
 
-// ------------------- INIT -------------------
-function init() {
-  // DOM elemanları
-  statusEl = $('status'); scoreEl = $('score'); healthEl = $('health'); winGoalEl = $('winGoal'); startBtn = $('startBtn');
+/* ---------- INIT ---------- */
+function init(){
+  statusEl = $('status'); scoreEl = $('score'); healthEl = $('health'); winGoalEl = $('winGoal'); startBtn = $('startBtn'); restartBtn = $('restartBtn');
   winGoalEl.textContent = WIN_SCORE;
 
-  // Renderer + Scene
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias:true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
   document.body.appendChild(renderer.domElement);
 
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9bd3ff); // hafif gökyüzü
-  clock = new THREE.Clock();
-
-  // Camera
+  scene.background = new THREE.Color(0x9bd3ff);
   camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 2, 6);
+  camera.position.set(0,1.6,6);
 
-  // Audio listener
   listener = new THREE.AudioListener();
   camera.add(listener);
 
-  // Lights
-  const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.7);
-  hemi.position.set(0, 50, 0);
-  scene.add(hemi);
+  const hemi = new THREE.HemisphereLight(0xffffff,0x444444,0.7); hemi.position.set(0,50,0); scene.add(hemi);
+  const dir = new THREE.DirectionalLight(0xffffff,0.9); dir.position.set(5,20,10); dir.castShadow=true; scene.add(dir);
 
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(5, 20, 10);
-  dir.castShadow = true;
-  dir.shadow.camera.top = 10; dir.shadow.camera.bottom = -10;
-  dir.shadow.camera.left = -10; dir.shadow.camera.right = 10;
-  scene.add(dir);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x1e6b2e}));
+  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
 
-  // Ground (simple)
-  const groundGeo = new THREE.PlaneGeometry(200,200);
-  const groundMat = new THREE.MeshStandardMaterial({ color:0x1e6b2e });
-  const ground = new THREE.Mesh(groundGeo, groundMat);
-  ground.rotation.x = -Math.PI/2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  player = new THREE.Object3D(); player.position.set(0,1,0); scene.add(player);
 
-  // Player placeholder (position & logical object)
-  player = new THREE.Object3D();
-  player.position.set(0, 1.0, 0);
-  scene.add(player);
+  controls = new THREE.PointerLockControls( camera, document.body );
+  controls.addEventListener('lock', () => { isPointerLocked = true; statusEl.textContent = 'Pointer kilitlendi - oyun başlıyor'; });
+  controls.addEventListener('unlock', () => { isPointerLocked = false; statusEl.textContent = 'Pointer açıldı'; });
 
-  // Controls (pointer lock)
-  controls = new THREE.PointerLockControls(camera, document.body);
-  startBtn.addEventListener('click', () => {
-    controls.lock();
-    if (!isRunning) startGame();
-  });
-  controls.addEventListener('lock', () => {
-    statusEl.textContent = 'Oyun başladı';
-  });
-  controls.addEventListener('unlock', () => {
-    statusEl.textContent = 'Durdu (pointer unlock)';
-  });
-
-  // Resize handler
   window.addEventListener('resize', onWindowResize, false);
+  attachInputHandlers();
 
-  // Start asset loading
-  loadAllAssets().then(setupWorld).catch(err => {
-    console.error('Asset yükleme hatası:', err);
-    setupWorld(); // yine de dene
-  });
+  clock = new THREE.Clock();
+
+  // yükle
+  loadAllAssets().then(setupWorld).catch(err => { console.warn(err); setupWorld(); });
 }
 
-function onWindowResize(){
-  camera.aspect = window.innerWidth/window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-}
-
-// ------------------- ASSET YÜKLEME -------------------
-function loadGLTF(url){
-  return new Promise((res, rej) => {
-    const loader = new THREE.GLTFLoader();
-    loader.load(url, gltf => res(gltf.scene), err => rej(err));
-  });
-}
-
-function loadAudioBuffer(url){
-  return new Promise((resolve, reject) => {
-    const audioLoader = new THREE.AudioLoader();
-    audioLoader.load(url, buffer => resolve(buffer), undefined, err => reject(err));
-  });
-}
+/* ---------- ASSET YÜKLEME ---------- */
+function loadGLTF(url){ return new Promise((res,rej) => { const loader = new THREE.GLTFLoader(); loader.load(url, g => res(g.scene), undefined, err => rej(err)); }); }
+function loadAudioBuffer(url){ return new Promise((res,rej) => { const al = new THREE.AudioLoader(); al.load(url, buff => res(buff), undefined, err => rej(err)); }); }
 
 async function loadAllAssets(){
-  const promises = [];
-  // Modeller
-  for (const [k, path] of Object.entries(MODEL_PATHS)){
-    promises.push(
-      loadGLTF(path).then(obj => { loadedModels[k] = obj; }).catch(err => {
-        console.warn('Model yüklenemedi:', path, err);
-        loadedModels[k] = null; // fallback
-      })
-    );
+  const tasks = [];
+  for (const [k,p] of Object.entries(MODEL_PATHS)){
+    tasks.push(loadGLTF(p).then(o => loadedModels[k] = o).catch(e => { console.warn('Model yüklenemedi',p); loadedModels[k]=null; }));
   }
-
-  // Sesler
-  for (const [k, path] of Object.entries(SOUND_PATHS)){
-    promises.push(
-      loadAudioBuffer(path).then(buffer => {
-        const audio = new THREE.Audio(listener);
-        audio.setBuffer(buffer);
-        // loop ambiyans haricinde auto play kontrolü oyunun başında yapılır
-        if (k === 'ambient') audio.setLoop(true);
-        sounds[k] = audio;
-      }).catch(err => {
-        console.warn('Ses yüklenemedi:', path, err);
-        sounds[k] = null;
-      })
-    );
+  for (const [k,p] of Object.entries(SOUND_PATHS)){
+    tasks.push(loadAudioBuffer(p).then(buf => { const a = new THREE.Audio(listener); a.setBuffer(buf); if (k==='ambient') a.setLoop(true); sounds[k]=a; }).catch(e => { console.warn('Ses yüklenemedi',p); sounds[k]=null; }));
   }
-
-  return Promise.all(promises);
+  return Promise.all(tasks);
 }
 
-// ------------------- DÜNYA KURULUMU (MODELS -> sahne yerleştirme) -------------------
-function setupWorld() {
-  // Player model (optional)
-  if (loadedModels.player){
-    const pm = loadedModels.player.clone();
-    pm.scale.setScalar(1.0);
-    pm.traverse(n => { if (n.isMesh) n.castShadow = true; });
-    player.add(pm);
-  } else {
-    // fallback simple capsule
-    const mesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.8, 4, 8), new THREE.MeshStandardMaterial({color:0x0077ff}));
-    mesh.castShadow = true;
-    player.add(mesh);
-  }
+/* ---------- DÜNYA KURULUMU ---------- */
+function setupWorld(){
+  // player model fallback
+  if (loadedModels.player){ const pm = loadedModels.player.clone(); pm.traverse(n => n.isMesh && (n.castShadow = true)); player.add(pm); } 
+  else { const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.4,0.8,4,8), new THREE.MeshStandardMaterial({color:0x0077ff})); m.castShadow=true; player.add(m); }
 
-  // Trees
+  // trees
   for (let i=0;i<40;i++){
-    const x = rand(-45,45), z = rand(-45,45);
-    let tree;
-    if (loadedModels.tree){
-      tree = loadedModels.tree.clone();
-      tree.scale.setScalar(rand(0.8,1.4));
-    } else {
-      tree = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,3,8), new THREE.MeshStandardMaterial({color:0x654321}));
-      const leaf = new THREE.Mesh(new THREE.SphereGeometry(1.2,8,8), new THREE.MeshStandardMaterial({color:0x2e8b57}));
-      leaf.position.y = 1.8; tree.add(leaf);
-    }
-    tree.position.set(x, 0.0, z);
-    tree.castShadow = true;
-    tree.userData = tree.userData || {};
-    tree.userData._playerInside = false;
-    trees.push(tree);
-    scene.add(tree);
+    const x=rand(-45,45), z=rand(-45,45);
+    let t;
+    if (loadedModels.tree){ t = loadedModels.tree.clone(); t.scale.setScalar(rand(0.8,1.4)); }
+    else { t = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,3,8), new THREE.MeshStandardMaterial({color:0x654321})); const leaf=new THREE.Mesh(new THREE.SphereGeometry(1.2,8,8), new THREE.MeshStandardMaterial({color:0x2e8b57})); leaf.position.y=1.8; t.add(leaf); }
+    t.position.set(x,0,z); t.userData = { _playerInside:false }; t.castShadow=true; scene.add(t); trees.push(t);
   }
 
-  // Gems
+  // gems
   for (let i=0;i<GEM_COUNT;i++){
-    const x = rand(-40,40), z = rand(-40,40);
-    let gem;
-    if (loadedModels.gem){
-      gem = loadedModels.gem.clone();
-      gem.scale.setScalar(0.6);
-    } else {
-      gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({emissive: new THREE.Color(0x00ffcc), metalness:0.3}));
-    }
-    gem.position.set(x, 0.6, z);
-    gem.userData = { value: Math.round(rand(3,5)) };
-    gems.push(gem);
-    scene.add(gem);
+    const x=rand(-40,40), z=rand(-40,40);
+    let g;
+    if (loadedModels.gem){ g = loadedModels.gem.clone(); g.scale.setScalar(0.6); } 
+    else { g = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({emissive: new THREE.Color(0x00ffcc), metalness:0.25})); }
+    g.position.set(x,0.6,z); g.userData = { value: Math.round(rand(3,5)) }; scene.add(g); gems.push(g);
   }
 
-  // Enemies
   createEnemies();
 
-  // Play ambient if loaded
-  if (sounds.ambient) {
-    sounds.ambient.setVolume(0.25);
-    sounds.ambient.play();
-  }
-
-  // UI update
+  // ambient start only after user gesture — will be started on startBtn click
   updateUI();
-
-  // Start render loop (but game starts on pointer lock)
   animate();
 }
 
-// ------------------- OYUN BAŞLAMA / DURUM -------------------
-function startGame() {
-  isRunning = true;
-  gemsCollected = 0;
-  health = PLAYER_MAX_HEALTH;
-  scoreEl.textContent = gemsCollected;
-  healthEl.textContent = health;
-  statusEl.textContent = 'Oyun çalışıyor';
-  // reset objects: remove extra enemies/gems if needed (simple approach: reload scene)
-  // (burada mevcut scene öğeleri korunur)
-}
-
-// ------------------- DÜŞMAN OLUŞTURMA / GÜNCELLEME -------------------
+/* ---------- ENEMIES ---------- */
 function createEnemies(){
   enemies.forEach(e => scene.remove(e));
   enemies = [];
-  for (let i = 0; i < ENEMY_COUNT; i++){
-    const type = Math.random() > 0.5 ? 'kurt' : 'cin';
+  for (let i=0;i<ENEMY_COUNT;i++){
+    const type = Math.random()>0.5 ? 'kurt' : 'cin';
     let e;
-    if (type === 'cin' && loadedModels.enemyCin){
-      e = loadedModels.enemyCin.clone();
-      e.scale.setScalar(0.9);
-    } else if (type === 'kurt' && loadedModels.enemyKurt){
-      e = loadedModels.enemyKurt.clone();
-      e.scale.setScalar(0.9);
-    } else {
-      const c = type === 'kurt' ? 0x333333 : 0x2e8b57;
-      e = new THREE.Mesh(new THREE.SphereGeometry(0.6,12,12), new THREE.MeshStandardMaterial({color:c}));
-    }
-    e.position.set(rand(-40,40), 0.6, rand(-40,40));
-    e.castShadow = true;
+    if (type==='cin' && loadedModels.enemyCin){ e = loadedModels.enemyCin.clone(); e.scale.setScalar(0.9); }
+    else if (type==='kurt' && loadedModels.enemyKurt){ e = loadedModels.enemyKurt.clone(); e.scale.setScalar(0.9); }
+    else { e = new THREE.Mesh(new THREE.SphereGeometry(0.6,12,12), new THREE.MeshStandardMaterial({color: type==='kurt' ? 0x333333 : 0x2e8b57})); }
+    e.position.set(rand(-40,40),0.6,rand(-40,40)); e.castShadow=true;
     e.userData = {
-      type: type,
-      baseSpeed: type === 'kurt' ? 2.2 : 1.5,
-      speed: 0,
-      damage: type === 'kurt' ? 12 : 6,
-      detectionRadius: type === 'kurt' ? 8 : 12,
-      attackCooldown: 1.2,
-      lastAttack: -999,
+      type, baseSpeed: type==='kurt' ? 2.2 : 1.5, speed:0, damage: type==='kurt' ? 12 : 6,
+      detectionRadius: type==='kurt' ? 8:12, attackCooldown:1.2, lastAttack:-999,
       patrolDir: new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize(),
-      lastSprint: -999,
-      sprintCooldown: 5 + Math.random()*6,
-      lastTeleport: -999,
-      teleportCooldown: 6 + Math.random()*8
+      lastSprint:-999, sprintCooldown:5+Math.random()*6, lastTeleport:-999, teleportCooldown:6+Math.random()*8
     };
-    enemies.push(e);
-    scene.add(e);
+    enemies.push(e); scene.add(e);
   }
 }
 
 function updateEnemies(delta){
   const elapsed = clock.getElapsedTime();
   const difficultyScale = 1 + (gemsCollected / 50) + (elapsed / 120);
-
   enemies.forEach(enemy => {
     enemy.userData.speed = enemy.userData.baseSpeed * difficultyScale;
     const toPlayer = new THREE.Vector3().subVectors(player.position, enemy.position);
     const dist = toPlayer.length();
-
     if (dist < enemy.userData.detectionRadius){
-      // detected player
       if (enemy.userData.type === 'kurt'){
-        // chase + possible sprint
         if (elapsed - enemy.userData.lastSprint > enemy.userData.sprintCooldown && Math.random() < 0.25){
           enemy.userData.lastSprint = elapsed;
-          const sprintVel = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 3);
-          enemy.userData.velocity = sprintVel;
+          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 3);
         } else {
           enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed);
         }
       } else {
-        // cin: teleport sometimes if far; if near, pulse/retreat
         if (dist > 6){
           if (elapsed - enemy.userData.lastTeleport > enemy.userData.teleportCooldown && Math.random() < 0.06){
             enemy.userData.lastTeleport = elapsed;
@@ -354,7 +253,6 @@ function updateEnemies(delta){
         }
       }
     } else {
-      // patrol
       if (!enemy.userData.velocity || enemy.userData.velocity.length() < 0.01){
         enemy.userData.velocity = enemy.userData.patrolDir.clone().multiplyScalar(enemy.userData.speed*0.4);
       }
@@ -365,90 +263,59 @@ function updateEnemies(delta){
     }
 
     if (enemy.userData.velocity) enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta));
-
-    // bounds
-    if (Math.abs(enemy.position.x) > 48) enemy.position.x = THREE.MathUtils.clamp(enemy.position.x, -48, 48);
-    if (Math.abs(enemy.position.z) > 48) enemy.position.z = THREE.MathUtils.clamp(enemy.position.z, -48, 48);
-
-    // small rotate to feel alive
+    enemy.position.x = THREE.MathUtils.clamp(enemy.position.x, -48, 48);
+    enemy.position.z = THREE.MathUtils.clamp(enemy.position.z, -48, 48);
     enemy.rotation.y += delta * 0.5 * (enemy.userData.type === 'kurt' ? 1.4 : 0.8);
   });
 }
 
-// ------------------- PLAYER GÜNCELLEME -------------------
-let move = { forward:0, right:0 };
-let playerLastHurt = -999;
-const PLAYER_INVULN = 1.0;
-
+/* ---------- PLAYER GÜNCELLEME ---------- */
 function updatePlayer(delta){
-  // input (keyboard)
-  // simple WASD
-  // event listeners set at bottom
   const elapsed = clock.getElapsedTime();
   let moveSpeed = PLAYER_BASE_SPEED;
-  if (player.userData && player.userData.slowUntil && elapsed < player.userData.slowUntil){
-    moveSpeed *= 0.45;
-  }
+  if (player.userData && player.userData.slowUntil && elapsed < player.userData.slowUntil) moveSpeed *= 0.45;
+
   const velocity = new THREE.Vector3();
   if (move.forward !== 0) {
-    const dir = new THREE.Vector3();
-    camera.getWorldDirection(dir);
-    dir.y = 0; dir.normalize();
+    const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
     velocity.add(dir.multiplyScalar(move.forward));
   }
-  if (move.right !== 0){
-    const right = new THREE.Vector3();
-    camera.getWorldDirection(right);
-    right.y = 0;
-    right.normalize();
-    // right vector:
-    right.cross(camera.up);
+  if (move.right !== 0) {
+    const right = new THREE.Vector3(); camera.getWorldDirection(right); right.y = 0; right.normalize(); right.cross(camera.up);
     velocity.add(right.multiplyScalar(move.right));
   }
+
   if (velocity.length() > 0) {
     velocity.normalize();
     player.position.add(velocity.multiplyScalar(moveSpeed * delta));
-    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
-  } else {
-    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
   }
-
-  // limit area
+  camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
   player.position.x = THREE.MathUtils.clamp(player.position.x, -49, 49);
   player.position.z = THREE.MathUtils.clamp(player.position.z, -49, 49);
 }
 
-// ------------------- ÇARPIŞMA / ETKİLEŞİM -------------------
+/* ---------- ÇARPIŞMA ---------- */
 function checkCollisions(){
   const elapsed = clock.getElapsedTime();
-
-  // enemies -> player
   enemies.forEach(enemy => {
-    const dist = enemy.position.distanceTo(player.position);
-    if (dist < 1.4){
+    if (enemy.position.distanceTo(player.position) < 1.4){
       if (elapsed - playerLastHurt > PLAYER_INVULN && elapsed - enemy.userData.lastAttack > enemy.userData.attackCooldown){
-        let damage = enemy.userData.damage;
-        damage = Math.round(damage * (1 + gemsCollected/100)); // zorluk faktörü
-        health -= damage;
-        enemy.userData.lastAttack = elapsed;
-        playerLastHurt = elapsed;
-        if (sounds.damage) { sounds.damage.setVolume(0.9); sounds.damage.play(); }
+        let damage = Math.round(enemy.userData.damage * (1 + gemsCollected/100));
+        health -= damage; enemy.userData.lastAttack = elapsed; playerLastHurt = elapsed;
+        if (sounds.damage){ try { sounds.damage.setVolume(0.9); sounds.damage.play(); } catch(e){} }
         updateUI();
         if (health <= 0) gameOver();
       }
     }
   });
 
-  // trees -> hazard zone (ilk girişte hasar + yavaşlama)
   trees.forEach(tree => {
     const dist = tree.position.distanceTo(player.position);
     if (!tree.userData._playerInside && dist < 2.0){
-      tree.userData._playerInside = true;
-      const elapsed = clock.getElapsedTime();
-      health -= 6;
-      if (!player.userData) player.userData = {};
-      player.userData.slowUntil = elapsed + 2.0;
-      if (sounds.damage) { sounds.damage.setVolume(0.6); sounds.damage.play(); }
+      tree.userData._playerInside = true; health -= 6;
+      player.userData = player.userData || {};
+      player.userData.slowUntil = clock.getElapsedTime() + 2.0;
+      if (sounds.damage){ try { sounds.damage.setVolume(0.6); sounds.damage.play(); } catch(e){} }
       updateUI();
       if (health <= 0) gameOver();
     } else if (tree.userData._playerInside && dist >= 2.4){
@@ -456,30 +323,182 @@ function checkCollisions(){
     }
   });
 
-  // gems -> collect
-  for (let i = gems.length -1; i >= 0; i--){
+  for (let i=gems.length-1;i>=0;i--){
     const g = gems[i];
     if (g.position.distanceTo(player.position) < 1.2){
       gemsCollected += g.userData.value || 4;
-      scene.remove(g);
-      gems.splice(i,1);
-      if (sounds.gemCollect) { sounds.gemCollect.setVolume(0.9); sounds.gemCollect.play(); }
+      scene.remove(g); gems.splice(i,1);
+      if (sounds.gemCollect){ try { sounds.gemCollect.setVolume(0.9); sounds.gemCollect.play(); } catch(e){} }
       updateUI();
       if (gemsCollected >= WIN_SCORE) gameWon();
     }
   }
 }
 
-// ------------------- OYUN SONU / GALİBİYET -------------------
+/* ---------- OYUN SONU ---------- */
 function gameWon(){
-  statusEl.textContent = 'Kazandın! 🎉';
-  isRunning = false;
-  if (sounds.win) sounds.win.play();
-  // pointer unlock to allow user to restart
-  controls.unlock();
+  isRunning = false; statusEl.textContent = 'Kazandın! 🎉'; controls.unlock();
+  if (sounds.win){ try { sounds.win.setVolume(0.9); sounds.win.play(); } catch(e){} }
+  $('restartBtn').style.display='block';
+}
+function gameOver(){
+  isRunning = false; statusEl.textContent = 'Oyunu kaybettin.'; controls.unlock();
+  if (sounds.gameover){ try { sounds.gameover.setVolume(0.9); sounds.gameover.play(); } catch(e){} }
+  $('restartBtn').style.display='block';
 }
 
-function gameOver(){
-  statusEl.textContent = 'Oyunu kaybettin.';
-  isRunning = false;
-  if (sounds
+/* ---------- UI ---------- */
+function updateUI(){ scoreEl.textContent = gemsCollected; healthEl.textContent = Math.max(0, Math.round(health)); }
+
+/* ---------- ANIMATE ---------- */
+function animate(){
+  requestAnimationFrame(animate);
+  const delta = Math.min(0.05, clock.getDelta());
+  if (isRunning){
+    updatePlayer(delta);
+    updateEnemies(delta);
+    checkCollisions();
+  } else {
+    // kamera player'ı takip et
+    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
+  }
+  gems.forEach(g => g.rotation.y += 0.8 * delta);
+  renderer.render(scene, camera);
+}
+
+/* ---------- GİRİŞ / KONTROLLER ---------- */
+function onWindowResize(){ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+function attachInputHandlers(){
+  // klavye
+  window.addEventListener('keydown', e => {
+    if (e.code === 'KeyW') move.forward = 1;
+    if (e.code === 'KeyS') move.forward = -1;
+    if (e.code === 'KeyA') move.right = -1;
+    if (e.code === 'KeyD') move.right = 1;
+  });
+  window.addEventListener('keyup', e => {
+    if (e.code === 'KeyW' || e.code === 'KeyS') move.forward = 0;
+    if (e.code === 'KeyA' || e.code === 'KeyD') move.right = 0;
+  });
+
+  // pointer lock + start
+  startBtn.addEventListener('click', async () => {
+    // startGame çağrısı kesinlikle burada
+    await startGame(); // ses ve değişkenler start ile başlatılır
+    // pointer lock destekliyorsa iste
+    try {
+      controls.lock();
+    } catch(e){}
+  });
+
+  restartBtn.addEventListener('click', () => {
+    location.reload(); // basit ve güvenli
+  });
+
+  // fare & dokunmatik kamera kontrol (sağ alt alan)
+  const camZone = $('camZone');
+  let camTouch = null;
+  let prevCam = null;
+
+  const startCamDrag = (clientX, clientY) => { camTouch = {x:clientX, y:clientY}; prevCam = {x:clientX, y:clientY}; };
+  const moveCamDrag = (clientX, clientY) => {
+    if (!camTouch) return;
+    const dx = (clientX - prevCam.x) * 0.0025;
+    const dy = (clientY - prevCam.y) * 0.0025;
+    // apply to controls or camera directly
+    camera.rotation.y -= dx;
+    camera.rotation.x = Math.max(-1.2, Math.min(1.2, camera.rotation.x - dy));
+    prevCam = {x:clientX, y:clientY};
+  };
+  const endCamDrag = () => { camTouch = null; prevCam = null; };
+
+  // mouse events for desktop drag on camZone
+  camZone.addEventListener('mousedown', e => { e.preventDefault(); startCamDrag(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e => { if (camTouch) moveCamDrag(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', endCamDrag);
+
+  // touch events
+  camZone.addEventListener('touchstart', e => { const t = e.changedTouches[0]; startCamDrag(t.clientX, t.clientY); }, {passive:false});
+  camZone.addEventListener('touchmove', e => { const t = e.changedTouches[0]; moveCamDrag(t.clientX, t.clientY); }, {passive:false});
+  camZone.addEventListener('touchend', endCamDrag);
+
+  // virtual joystick (mobil)
+  setupJoystick();
+}
+
+/* ---------- JOYSTICK ---------- */
+function setupJoystick(){
+  const joy = $('joystick');
+  const thumb = $('joyThumb');
+  const bg = $('joyBg');
+  let active = false;
+  let startX=0, startY=0;
+  const maxDist = 44; // px
+
+  const touchStart = (x,y) => {
+    active = true; startX = x; startY = y;
+    thumb.style.transition = 'none';
+  };
+  const touchMove = (x,y) => {
+    if (!active) return;
+    const dx = x - startX, dy = y - startY;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const clamped = Math.min(maxDist, dist);
+    const angle = Math.atan2(dy, dx);
+    const tx = Math.cos(angle) * clamped, ty = Math.sin(angle)*clamped;
+    thumb.style.transform = `translate(${tx}px, ${ty}px)`;
+    // normalize to [-1,1]
+    const nx = tx / maxDist;
+    const ny = ty / maxDist;
+    // forward is -y (up moves forward)
+    move.forward = -(Math.round(ny*100)/100);
+    move.right = Math.round(nx*100)/100;
+  };
+  const touchEnd = () => {
+    active = false;
+    thumb.style.transition = 'transform 0.12s ease'; thumb.style.transform = `translate(0px,0px)`;
+    move.forward = 0; move.right = 0;
+  };
+
+  // mouse for debug / desktop
+  thumb.addEventListener('mousedown', e => { e.preventDefault(); touchStart(e.clientX, e.clientY); });
+  window.addEventListener('mousemove', e => { if (active) touchMove(e.clientX, e.clientY); });
+  window.addEventListener('mouseup', () => { if (active) touchEnd(); });
+
+  // touch
+  joy.addEventListener('touchstart', e => { const t = e.changedTouches[0]; touchStart(t.clientX, t.clientY); }, {passive:false});
+  joy.addEventListener('touchmove', e => { const t = e.changedTouches[0]; touchMove(t.clientX, t.clientY); }, {passive:false});
+  joy.addEventListener('touchend', e => { touchEnd(); }, {passive:false});
+}
+
+/* ---------- START GAME (SON DERECE ÖNEMLİ: başlatma mantığı) ---------- */
+async function startGame(){
+  // prevent double start
+  if (isRunning) return;
+  // reset variables
+  gemsCollected = 0; health = PLAYER_MAX_HEALTH; isRunning = true;
+  $('startBtn').style.display = 'none';
+  $('restartBtn').style.display = 'none';
+  statusEl.textContent = 'Oyun başladı';
+  updateUI();
+  // play ambient (must be user gesture)
+  try { if (sounds.ambient) { sounds.ambient.setVolume(0.25); sounds.ambient.play(); } } catch(e){ console.warn('ambient play error',e); }
+  // ensure mobile controls visible if touch device
+  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches){
+    $('joystick').style.display = 'block';
+    $('camZone').style.display = 'block';
+  } else {
+    $('joystick').style.display = 'none';
+    $('camZone').style.display = 'none';
+  }
+}
+
+/* ---------- STARTUP ---------- */
+init();
+
+/* ---------- RESTART BUTTON SHOWING HANDLED IN gameOver / gameWon ---------- */
+
+</script>
+</body>
+</html>
