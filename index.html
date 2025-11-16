@@ -311,6 +311,11 @@
                 // Yükleme ekranını gizle ve oyunu başlat
                 console.log('🎮 Tüm assetler hazır, oyun başlatılıyor!');
                 
+                // Önce bir kez render et (test için)
+                renderer.render(scene, camera);
+                console.log('Renderer test:', renderer);
+                console.log('Scene children:', scene.children.length);
+                
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('ui').style.display = 'block';
                 document.getElementById('instructions').style.display = 'block';
@@ -323,6 +328,7 @@
                 }
 
                 gameActive = true;
+                console.log('Animate başlatılıyor...');
                 animate();
             } catch (error) {
                 showError('Oyun başlatılırken hata: ' + error.message);
