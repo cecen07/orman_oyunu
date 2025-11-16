@@ -1,504 +1,970 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-<title>3D Orman RPG — Mobil & Masaüstü</title>
-<style>
-  html,body{height:100%;margin:0;font-family:Inter,Arial,Helvetica,sans-serif;background:#08121a;color:#fff;overflow:hidden}
-  #overlay{
-    position: absolute; left:12px; top:12px; z-index:40; 
-    background: rgba(0,0,0,0.45); padding:12px; border-radius:10px; 
-    min-width:220px;
-  }
-  #info { font-size:14px; line-height:1.4; }
-  #startBtn, #restartBtn {
-    display:block; margin-top:8px; padding:10px 14px; border-radius:8px; border:none; cursor:pointer;
-    background: linear-gradient(180deg,#2ea7ff,#0066cc); color:#fff; font-weight:600;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-  }
-  #statusSmall { font-size:12px; opacity:0.9; margin-top:6px; }
-  canvas{display:block}
-
-  /* Joystick container */
-  #joystick {
-    position: fixed; left:18px; bottom:18px; z-index:35; width:140px; height:140px;
-    border-radius:50%; touch-action:none;
-    display:none; /* mobilde gösterilecek */
-  }
-  #joyBg {
-    position:absolute; width:100%; height:100%; border-radius:50%;
-    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
-    border: 2px solid rgba(255,255,255,0.06);
-  }
-  #joyThumb {
-    position:absolute; width:54px; height:54px; left:43px; top:43px; border-radius:50%;
-    background: rgba(255,255,255,0.12); display:flex; align-items:center; justify-content:center;
-    font-size:12px; color:#fff;
-    touch-action:none;
-  }
-
-  /* camera drag zone */
-  #camZone {
-    position: fixed; right:8px; bottom:8px; z-index:35; width:42%; height:48%;
-    border-radius:12px; background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.02));
-    touch-action:none; display:none;
-  }
-
-  /* mobile adjustments */
-  @media (pointer: coarse) {
-    #joystick, #camZone { display:block; }
-    #overlay { left:10px; right:10px; top:8px; min-width:unset; }
-    #info { font-size:15px; }
-    #startBtn { padding:12px 16px; font-size:16px; }
-  }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Orman RPG - BTK Akademi Projesi</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        #gameCanvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            color: white;
+        }
+        
+        #loadingTitle {
+            font-size: 32px;
+            margin-bottom: 20px;
+            color: #4CAF50;
+        }
+        
+        #loadingText {
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+        
+        #progressBar {
+            width: 400px;
+            height: 30px;
+            background: #333;
+            border-radius: 15px;
+            overflow: hidden;
+            border: 2px solid #4CAF50;
+        }
+        
+        #progressFill {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        
+        #progressPercent {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #4CAF50;
+        }
+        
+        #debugLog {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #888;
+            max-width: 500px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+        }
+        
+        #ui {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            font-size: 18px;
+            z-index: 100;
+            display: none;
+            border: 2px solid #4CAF50;
+        }
+        
+        #ui div {
+            margin: 10px 0;
+        }
+        
+        .health-bar {
+            width: 200px;
+            height: 25px;
+            background: #333;
+            border-radius: 12px;
+            overflow: hidden;
+            margin-top: 8px;
+            border: 2px solid #666;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ff0000, #ff6666);
+            transition: width 0.3s;
+        }
+        
+        #instructions {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px 40px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            border: 2px solid #4CAF50;
+        }
+        
+        #gameOver, #gameWon {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 50px;
+            border-radius: 20px;
+            text-align: center;
+            display: none;
+            z-index: 200;
+            border: 3px solid;
+        }
+        
+        #gameOver {
+            border-color: #ff0000;
+        }
+        
+        #gameWon {
+            border-color: #ffd700;
+        }
+        
+        #gameOver h1 {
+            color: #ff0000;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #ff0000;
+        }
+        
+        #gameWon h1 {
+            color: #ffd700;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #ffd700;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 22px;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+        
+        button:hover {
+            background: #45a049;
+            transform: scale(1.05);
+        }
+        
+        .stat-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+    </style>
 </head>
 <body>
-  <div id="overlay">
-    <div id="info">
-      <strong>Orman RPG — Demo</strong><br>
-      Gems: <span id="score">0</span> / <span id="winGoal">100</span><br>
-      Can: <span id="health">100</span><br>
-      Durum: <span id="status">Hazır</span><br>
+    <div id="loading">
+        <div id="loadingTitle">🌲 3D ORMAN RPG 🌲</div>
+        <div id="loadingText">Başlatılıyor...</div>
+        <div id="progressBar">
+            <div id="progressFill"></div>
+        </div>
+        <div id="progressPercent">0%</div>
+        <div id="debugLog"></div>
     </div>
-    <button id="startBtn">Oyunu Başlat</button>
-    <button id="restartBtn" style="display:none;margin-top:6px;background:#ff5f5f;">Tekrar Başlat</button>
-    <div id="statusSmall">Kontroller: WASD veya sol joystick (mobil). Kamera: fare ile bak veya sağ bölgeyi sürükle.</div>
-  </div>
 
-  <div id="joystick" aria-hidden="true">
-    <div id="joyBg"></div>
-    <div id="joyThumb">●</div>
-  </div>
-  <div id="camZone" aria-hidden="true"></div>
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui">
+        <div><span class="stat-label">❤️ Can:</span> <span id="healthText">100</span></div>
+        <div class="health-bar">
+            <div class="health-fill" id="healthBar"></div>
+        </div>
+        <div><span class="stat-label">💎 Gemler:</span> <span id="gemsText">0</span> / 100</div>
+    </div>
 
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/controls/PointerLockControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+    <div id="instructions">
+        <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;">🎮 KONTROLLER</div>
+        <div>W/A/S/D veya Ok Tuşları - Hareket</div>
+        <div>Space - Zıpla</div>
+        <div>Mouse - Kamera Kontrolü</div>
+        <div style="margin-top: 10px; color: #4CAF50;">💎 100 Gem Topla ve Kazan!</div>
+    </div>
 
-<script>
-/* ---------- AYARLAR ---------- */
-const MODEL_PATHS = {
-  player: 'models/player.glb',
-  tree: 'models/tree.glb',
-  enemyCin: 'models/enemy-cin.glb',
-  enemyKurt: 'models/enemy-kurt.glb',
-  gem: 'models/gem.glb'
-};
-const SOUND_PATHS = {
-  gemCollect: 'sounds/gem.mp3',
-  damage: 'sounds/damage.mp3',
-  ambient: 'sounds/ambient.mp3',
-  win: 'sounds/win.mp3',
-  gameover: 'sounds/gameover.mp3'
-};
+    <div id="gameOver">
+        <h1>☠️ OYUN BİTTİ ☠️</h1>
+        <p style="color: white; font-size: 24px;">Toplam Gem: <span id="finalScore">0</span></p>
+        <button onclick="location.reload()">🔄 Tekrar Dene</button>
+    </div>
 
-const WIN_SCORE = 100;
-const GEM_COUNT = 25;
-const ENEMY_COUNT = 8;
-const PLAYER_MAX_HEALTH = 100;
-const PLAYER_BASE_SPEED = 6.0;
+    <div id="gameWon">
+        <h1>🏆 KAZANDIN! 🏆</h1>
+        <p style="color: white; font-size: 24px;">100 Gem Topladın! 🎉</p>
+        <button onclick="location.reload()">🔄 Tekrar Oyna</button>
+    </div>
 
-/* ---------- GLOBALS ---------- */
-let scene, camera, renderer, clock;
-let player, controls;
-let loadedModels = {}, sounds = {};
-let gems = [], trees = [], enemies = [];
-let gemsCollected = 0, health = PLAYER_MAX_HEALTH;
-let isRunning = false;
-let isPointerLocked = false;
-let statusEl, scoreEl, healthEl, winGoalEl, startBtn, restartBtn;
-let listener;
-let move = { forward:0, right:0 };
-let playerLastHurt = -999;
-const PLAYER_INVULN = 1.0;
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 
-/* ---------- UTILS ---------- */
-const $ = id => document.getElementById(id);
-function rand(min,max){ return min + Math.random()*(max-min); }
-
-/* ---------- INIT ---------- */
-function init(){
-  statusEl = $('status'); scoreEl = $('score'); healthEl = $('health'); winGoalEl = $('winGoal'); startBtn = $('startBtn'); restartBtn = $('restartBtn');
-  winGoalEl.textContent = WIN_SCORE;
-
-  renderer = new THREE.WebGLRenderer({ antialias:true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  document.body.appendChild(renderer.domElement);
-
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x9bd3ff);
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-  camera.position.set(0,1.6,6);
-
-  listener = new THREE.AudioListener();
-  camera.add(listener);
-
-  const hemi = new THREE.HemisphereLight(0xffffff,0x444444,0.7); hemi.position.set(0,50,0); scene.add(hemi);
-  const dir = new THREE.DirectionalLight(0xffffff,0.9); dir.position.set(5,20,10); dir.castShadow=true; scene.add(dir);
-
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200,200), new THREE.MeshStandardMaterial({color:0x1e6b2e}));
-  ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
-
-  player = new THREE.Object3D(); player.position.set(0,1,0); scene.add(player);
-
-  controls = new THREE.PointerLockControls( camera, document.body );
-  controls.addEventListener('lock', () => { isPointerLocked = true; statusEl.textContent = 'Pointer kilitlendi - oyun başlıyor'; });
-  controls.addEventListener('unlock', () => { isPointerLocked = false; statusEl.textContent = 'Pointer açıldı'; });
-
-  window.addEventListener('resize', onWindowResize, false);
-  attachInputHandlers();
-
-  clock = new THREE.Clock();
-
-  // yükle
-  loadAllAssets().then(setupWorld).catch(err => { console.warn(err); setupWorld(); });
-}
-
-/* ---------- ASSET YÜKLEME ---------- */
-function loadGLTF(url){ return new Promise((res,rej) => { const loader = new THREE.GLTFLoader(); loader.load(url, g => res(g.scene), undefined, err => rej(err)); }); }
-function loadAudioBuffer(url){ return new Promise((res,rej) => { const al = new THREE.AudioLoader(); al.load(url, buff => res(buff), undefined, err => rej(err)); }); }
-
-async function loadAllAssets(){
-  const tasks = [];
-  for (const [k,p] of Object.entries(MODEL_PATHS)){
-    tasks.push(loadGLTF(p).then(o => loadedModels[k] = o).catch(e => { console.warn('Model yüklenemedi',p); loadedModels[k]=null; }));
-  }
-  for (const [k,p] of Object.entries(SOUND_PATHS)){
-    tasks.push(loadAudioBuffer(p).then(buf => { const a = new THREE.Audio(listener); a.setBuffer(buf); if (k==='ambient') a.setLoop(true); sounds[k]=a; }).catch(e => { console.warn('Ses yüklenemedi',p); sounds[k]=null; }));
-  }
-  return Promise.all(tasks);
-}
-
-/* ---------- DÜNYA KURULUMU ---------- */
-function setupWorld(){
-  // player model fallback
-  if (loadedModels.player){ const pm = loadedModels.player.clone(); pm.traverse(n => n.isMesh && (n.castShadow = true)); player.add(pm); } 
-  else { const m = new THREE.Mesh(new THREE.CapsuleGeometry(0.4,0.8,4,8), new THREE.MeshStandardMaterial({color:0x0077ff})); m.castShadow=true; player.add(m); }
-
-  // trees
-  for (let i=0;i<40;i++){
-    const x=rand(-45,45), z=rand(-45,45);
-    let t;
-    if (loadedModels.tree){ t = loadedModels.tree.clone(); t.scale.setScalar(rand(0.8,1.4)); }
-    else { t = new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.6,3,8), new THREE.MeshStandardMaterial({color:0x654321})); const leaf=new THREE.Mesh(new THREE.SphereGeometry(1.2,8,8), new THREE.MeshStandardMaterial({color:0x2e8b57})); leaf.position.y=1.8; t.add(leaf); }
-    t.position.set(x,0,z); t.userData = { _playerInside:false }; t.castShadow=true; scene.add(t); trees.push(t);
-  }
-
-  // gems
-  for (let i=0;i<GEM_COUNT;i++){
-    const x=rand(-40,40), z=rand(-40,40);
-    let g;
-    if (loadedModels.gem){ g = loadedModels.gem.clone(); g.scale.setScalar(0.6); } 
-    else { g = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({emissive: new THREE.Color(0x00ffcc), metalness:0.25})); }
-    g.position.set(x,0.6,z); g.userData = { value: Math.round(rand(3,5)) }; scene.add(g); gems.push(g);
-  }
-
-  createEnemies();
-
-  // ambient start only after user gesture — will be started on startBtn click
-  updateUI();
-  animate();
-}
-
-/* ---------- ENEMIES ---------- */
-function createEnemies(){
-  enemies.forEach(e => scene.remove(e));
-  enemies = [];
-  for (let i=0;i<ENEMY_COUNT;i++){
-    const type = Math.random()>0.5 ? 'kurt' : 'cin';
-    let e;
-    if (type==='cin' && loadedModels.enemyCin){ e = loadedModels.enemyCin.clone(); e.scale.setScalar(0.9); }
-    else if (type==='kurt' && loadedModels.enemyKurt){ e = loadedModels.enemyKurt.clone(); e.scale.setScalar(0.9); }
-    else { e = new THREE.Mesh(new THREE.SphereGeometry(0.6,12,12), new THREE.MeshStandardMaterial({color: type==='kurt' ? 0x333333 : 0x2e8b57})); }
-    e.position.set(rand(-40,40),0.6,rand(-40,40)); e.castShadow=true;
-    e.userData = {
-      type, baseSpeed: type==='kurt' ? 2.2 : 1.5, speed:0, damage: type==='kurt' ? 12 : 6,
-      detectionRadius: type==='kurt' ? 8:12, attackCooldown:1.2, lastAttack:-999,
-      patrolDir: new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize(),
-      lastSprint:-999, sprintCooldown:5+Math.random()*6, lastTeleport:-999, teleportCooldown:6+Math.random()*8
-    };
-    enemies.push(e); scene.add(e);
-  }
-}
-
-function updateEnemies(delta){
-  const elapsed = clock.getElapsedTime();
-  const difficultyScale = 1 + (gemsCollected / 50) + (elapsed / 120);
-  enemies.forEach(enemy => {
-    enemy.userData.speed = enemy.userData.baseSpeed * difficultyScale;
-    const toPlayer = new THREE.Vector3().subVectors(player.position, enemy.position);
-    const dist = toPlayer.length();
-    if (dist < enemy.userData.detectionRadius){
-      if (enemy.userData.type === 'kurt'){
-        if (elapsed - enemy.userData.lastSprint > enemy.userData.sprintCooldown && Math.random() < 0.25){
-          enemy.userData.lastSprint = elapsed;
-          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 3);
-        } else {
-          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed);
+    <script>
+        // =============================================
+        // GLOBAL DEĞİŞKENLER
+        // =============================================
+        
+        let scene, camera, renderer, clock;
+        let player;
+        let enemies = [];
+        let gems = [];
+        let trees = [];
+        let ground;
+        
+        let gameActive = false;
+        let health = 100;
+        let gemsCollected = 0;
+        let keys = {};
+        let playerVelocity = new THREE.Vector3(0, 0, 0);
+        
+        let mouseX = 0;
+        let mouseY = 0;
+        let isPointerLocked = false;
+        
+        let audioListener;
+        let audioLoader;
+        let sounds = {
+            gemCollect: null,
+            damage: null,
+            ambient: null,
+            win: null,
+            gameOver: null
+        };
+        
+        let loadedModels = {
+            player: null,
+            tree: null,
+            enemyCin: null,
+            enemyKurt: null,
+            gem: null
+        };
+        
+        let totalAssets = 10;
+        let loadedAssets = 0;
+        let debugMessages = [];
+        
+        const CONFIG = {
+            PLAYER_SPEED: 5,
+            PLAYER_HEIGHT: 2,
+            JUMP_FORCE: 8,
+            GRAVITY: 20,
+            ENEMY_COUNT: 8,
+            GEM_COUNT: 25,
+            TREE_COUNT: 20,
+            WIN_SCORE: 100,
+            WORLD_SIZE: 90,
+            ENEMY_SPEED: 1.5,
+            ENEMY_DETECTION_RANGE: 15,
+            COLLECTION_RANGE: 2
+        };
+        
+        const PATHS = {
+            models: {
+                player: './models/player.glb',
+                tree: './models/tree.glb',
+                enemyCin: './models/enemy-cin.glb',
+                enemyKurt: './models/enemy-kurt.glb',
+                gem: './models/gem.glb'
+            },
+            sounds: {
+                gemCollect: './sounds/gem.mp3',
+                damage: './sounds/damage.mp3',
+                ambient: './sounds/ambient.mp3',
+                win: './sounds/win.mp3',
+                gameOver: './sounds/gameover.mp3'
+            }
+        };
+        
+        // =============================================
+        // DEBUG FONKSIYONLARI
+        // =============================================
+        
+        function addDebugLog(message) {
+            console.log(message);
+            debugMessages.push(message);
+            const debugLog = document.getElementById('debugLog');
+            if (debugLog) {
+                debugLog.innerHTML = debugMessages.slice(-10).join('<br>');
+            }
         }
-      } else {
-        if (dist > 6){
-          if (elapsed - enemy.userData.lastTeleport > enemy.userData.teleportCooldown && Math.random() < 0.06){
-            enemy.userData.lastTeleport = elapsed;
-            const angle = Math.random()*Math.PI*2;
-            const offset = new THREE.Vector3(Math.cos(angle)*2 + rand(-1,1), 0, Math.sin(angle)*2 + rand(-1,1));
-            enemy.position.copy(player.position).add(offset);
-          }
-          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(enemy.userData.speed * 0.9);
-        } else {
-          enemy.userData.velocity = toPlayer.clone().normalize().multiplyScalar(-enemy.userData.speed*0.5);
+        
+        function updateProgress(loaded, total) {
+            const percent = Math.floor((loaded / total) * 100);
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressPercent').textContent = percent + '%';
+            document.getElementById('loadingText').textContent = `Yükleniyor... ${loaded}/${total}`;
         }
-      }
-    } else {
-      if (!enemy.userData.velocity || enemy.userData.velocity.length() < 0.01){
-        enemy.userData.velocity = enemy.userData.patrolDir.clone().multiplyScalar(enemy.userData.speed*0.4);
-      }
-      if (Math.random() < 0.004) {
-        enemy.userData.patrolDir = new THREE.Vector3(rand(-1,1),0,rand(-1,1)).normalize();
-        enemy.userData.velocity = enemy.userData.patrolDir.clone().multiplyScalar(enemy.userData.speed*0.4);
-      }
-    }
-
-    if (enemy.userData.velocity) enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta));
-    enemy.position.x = THREE.MathUtils.clamp(enemy.position.x, -48, 48);
-    enemy.position.z = THREE.MathUtils.clamp(enemy.position.z, -48, 48);
-    enemy.rotation.y += delta * 0.5 * (enemy.userData.type === 'kurt' ? 1.4 : 0.8);
-  });
-}
-
-/* ---------- PLAYER GÜNCELLEME ---------- */
-function updatePlayer(delta){
-  const elapsed = clock.getElapsedTime();
-  let moveSpeed = PLAYER_BASE_SPEED;
-  if (player.userData && player.userData.slowUntil && elapsed < player.userData.slowUntil) moveSpeed *= 0.45;
-
-  const velocity = new THREE.Vector3();
-  if (move.forward !== 0) {
-    const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y = 0; dir.normalize();
-    velocity.add(dir.multiplyScalar(move.forward));
-  }
-  if (move.right !== 0) {
-    const right = new THREE.Vector3(); camera.getWorldDirection(right); right.y = 0; right.normalize(); right.cross(camera.up);
-    velocity.add(right.multiplyScalar(move.right));
-  }
-
-  if (velocity.length() > 0) {
-    velocity.normalize();
-    player.position.add(velocity.multiplyScalar(moveSpeed * delta));
-  }
-  camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
-  player.position.x = THREE.MathUtils.clamp(player.position.x, -49, 49);
-  player.position.z = THREE.MathUtils.clamp(player.position.z, -49, 49);
-}
-
-/* ---------- ÇARPIŞMA ---------- */
-function checkCollisions(){
-  const elapsed = clock.getElapsedTime();
-  enemies.forEach(enemy => {
-    if (enemy.position.distanceTo(player.position) < 1.4){
-      if (elapsed - playerLastHurt > PLAYER_INVULN && elapsed - enemy.userData.lastAttack > enemy.userData.attackCooldown){
-        let damage = Math.round(enemy.userData.damage * (1 + gemsCollected/100));
-        health -= damage; enemy.userData.lastAttack = elapsed; playerLastHurt = elapsed;
-        if (sounds.damage){ try { sounds.damage.setVolume(0.9); sounds.damage.play(); } catch(e){} }
-        updateUI();
-        if (health <= 0) gameOver();
-      }
-    }
-  });
-
-  trees.forEach(tree => {
-    const dist = tree.position.distanceTo(player.position);
-    if (!tree.userData._playerInside && dist < 2.0){
-      tree.userData._playerInside = true; health -= 6;
-      player.userData = player.userData || {};
-      player.userData.slowUntil = clock.getElapsedTime() + 2.0;
-      if (sounds.damage){ try { sounds.damage.setVolume(0.6); sounds.damage.play(); } catch(e){} }
-      updateUI();
-      if (health <= 0) gameOver();
-    } else if (tree.userData._playerInside && dist >= 2.4){
-      tree.userData._playerInside = false;
-    }
-  });
-
-  for (let i=gems.length-1;i>=0;i--){
-    const g = gems[i];
-    if (g.position.distanceTo(player.position) < 1.2){
-      gemsCollected += g.userData.value || 4;
-      scene.remove(g); gems.splice(i,1);
-      if (sounds.gemCollect){ try { sounds.gemCollect.setVolume(0.9); sounds.gemCollect.play(); } catch(e){} }
-      updateUI();
-      if (gemsCollected >= WIN_SCORE) gameWon();
-    }
-  }
-}
-
-/* ---------- OYUN SONU ---------- */
-function gameWon(){
-  isRunning = false; statusEl.textContent = 'Kazandın! 🎉'; controls.unlock();
-  if (sounds.win){ try { sounds.win.setVolume(0.9); sounds.win.play(); } catch(e){} }
-  $('restartBtn').style.display='block';
-}
-function gameOver(){
-  isRunning = false; statusEl.textContent = 'Oyunu kaybettin.'; controls.unlock();
-  if (sounds.gameover){ try { sounds.gameover.setVolume(0.9); sounds.gameover.play(); } catch(e){} }
-  $('restartBtn').style.display='block';
-}
-
-/* ---------- UI ---------- */
-function updateUI(){ scoreEl.textContent = gemsCollected; healthEl.textContent = Math.max(0, Math.round(health)); }
-
-/* ---------- ANIMATE ---------- */
-function animate(){
-  requestAnimationFrame(animate);
-  const delta = Math.min(0.05, clock.getDelta());
-  if (isRunning){
-    updatePlayer(delta);
-    updateEnemies(delta);
-    checkCollisions();
-  } else {
-    // kamera player'ı takip et
-    camera.position.copy(player.position).add(new THREE.Vector3(0,1.6,0));
-  }
-  gems.forEach(g => g.rotation.y += 0.8 * delta);
-  renderer.render(scene, camera);
-}
-
-/* ---------- GİRİŞ / KONTROLLER ---------- */
-function onWindowResize(){ camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
-
-function attachInputHandlers(){
-  // klavye
-  window.addEventListener('keydown', e => {
-    if (e.code === 'KeyW') move.forward = 1;
-    if (e.code === 'KeyS') move.forward = -1;
-    if (e.code === 'KeyA') move.right = -1;
-    if (e.code === 'KeyD') move.right = 1;
-  });
-  window.addEventListener('keyup', e => {
-    if (e.code === 'KeyW' || e.code === 'KeyS') move.forward = 0;
-    if (e.code === 'KeyA' || e.code === 'KeyD') move.right = 0;
-  });
-
-  // pointer lock + start
-  startBtn.addEventListener('click', async () => {
-    // startGame çağrısı kesinlikle burada
-    await startGame(); // ses ve değişkenler start ile başlatılır
-    // pointer lock destekliyorsa iste
-    try {
-      controls.lock();
-    } catch(e){}
-  });
-
-  restartBtn.addEventListener('click', () => {
-    location.reload(); // basit ve güvenli
-  });
-
-  // fare & dokunmatik kamera kontrol (sağ alt alan)
-  const camZone = $('camZone');
-  let camTouch = null;
-  let prevCam = null;
-
-  const startCamDrag = (clientX, clientY) => { camTouch = {x:clientX, y:clientY}; prevCam = {x:clientX, y:clientY}; };
-  const moveCamDrag = (clientX, clientY) => {
-    if (!camTouch) return;
-    const dx = (clientX - prevCam.x) * 0.0025;
-    const dy = (clientY - prevCam.y) * 0.0025;
-    // apply to controls or camera directly
-    camera.rotation.y -= dx;
-    camera.rotation.x = Math.max(-1.2, Math.min(1.2, camera.rotation.x - dy));
-    prevCam = {x:clientX, y:clientY};
-  };
-  const endCamDrag = () => { camTouch = null; prevCam = null; };
-
-  // mouse events for desktop drag on camZone
-  camZone.addEventListener('mousedown', e => { e.preventDefault(); startCamDrag(e.clientX, e.clientY); });
-  window.addEventListener('mousemove', e => { if (camTouch) moveCamDrag(e.clientX, e.clientY); });
-  window.addEventListener('mouseup', endCamDrag);
-
-  // touch events
-  camZone.addEventListener('touchstart', e => { const t = e.changedTouches[0]; startCamDrag(t.clientX, t.clientY); }, {passive:false});
-  camZone.addEventListener('touchmove', e => { const t = e.changedTouches[0]; moveCamDrag(t.clientX, t.clientY); }, {passive:false});
-  camZone.addEventListener('touchend', endCamDrag);
-
-  // virtual joystick (mobil)
-  setupJoystick();
-}
-
-/* ---------- JOYSTICK ---------- */
-function setupJoystick(){
-  const joy = $('joystick');
-  const thumb = $('joyThumb');
-  const bg = $('joyBg');
-  let active = false;
-  let startX=0, startY=0;
-  const maxDist = 44; // px
-
-  const touchStart = (x,y) => {
-    active = true; startX = x; startY = y;
-    thumb.style.transition = 'none';
-  };
-  const touchMove = (x,y) => {
-    if (!active) return;
-    const dx = x - startX, dy = y - startY;
-    const dist = Math.sqrt(dx*dx + dy*dy);
-    const clamped = Math.min(maxDist, dist);
-    const angle = Math.atan2(dy, dx);
-    const tx = Math.cos(angle) * clamped, ty = Math.sin(angle)*clamped;
-    thumb.style.transform = `translate(${tx}px, ${ty}px)`;
-    // normalize to [-1,1]
-    const nx = tx / maxDist;
-    const ny = ty / maxDist;
-    // forward is -y (up moves forward)
-    move.forward = -(Math.round(ny*100)/100);
-    move.right = Math.round(nx*100)/100;
-  };
-  const touchEnd = () => {
-    active = false;
-    thumb.style.transition = 'transform 0.12s ease'; thumb.style.transform = `translate(0px,0px)`;
-    move.forward = 0; move.right = 0;
-  };
-
-  // mouse for debug / desktop
-  thumb.addEventListener('mousedown', e => { e.preventDefault(); touchStart(e.clientX, e.clientY); });
-  window.addEventListener('mousemove', e => { if (active) touchMove(e.clientX, e.clientY); });
-  window.addEventListener('mouseup', () => { if (active) touchEnd(); });
-
-  // touch
-  joy.addEventListener('touchstart', e => { const t = e.changedTouches[0]; touchStart(t.clientX, t.clientY); }, {passive:false});
-  joy.addEventListener('touchmove', e => { const t = e.changedTouches[0]; touchMove(t.clientX, t.clientY); }, {passive:false});
-  joy.addEventListener('touchend', e => { touchEnd(); }, {passive:false});
-}
-
-/* ---------- START GAME (SON DERECE ÖNEMLİ: başlatma mantığı) ---------- */
-async function startGame(){
-  // prevent double start
-  if (isRunning) return;
-  // reset variables
-  gemsCollected = 0; health = PLAYER_MAX_HEALTH; isRunning = true;
-  $('startBtn').style.display = 'none';
-  $('restartBtn').style.display = 'none';
-  statusEl.textContent = 'Oyun başladı';
-  updateUI();
-  // play ambient (must be user gesture)
-  try { if (sounds.ambient) { sounds.ambient.setVolume(0.25); sounds.ambient.play(); } } catch(e){ console.warn('ambient play error',e); }
-  // ensure mobile controls visible if touch device
-  if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches){
-    $('joystick').style.display = 'block';
-    $('camZone').style.display = 'block';
-  } else {
-    $('joystick').style.display = 'none';
-    $('camZone').style.display = 'none';
-  }
-}
-
-/* ---------- STARTUP ---------- */
-init();
-
-/* ---------- RESTART BUTTON SHOWING HANDLED IN gameOver / gameWon ---------- */
-
-</script>
+        
+        // =============================================
+        // BAŞLATMA
+        // =============================================
+        
+        async function init() {
+            addDebugLog('🚀 Oyun başlatılıyor...');
+            
+            try {
+                setupThreeJS();
+                addDebugLog('✅ Three.js kurulumu tamamlandı');
+                
+                setupEventListeners();
+                addDebugLog('✅ Event listener\'lar eklendi');
+                
+                await loadAllAssets();
+                addDebugLog('✅ Tüm asset\'ler yüklendi');
+                
+                createGameObjects();
+                addDebugLog('✅ Oyun nesneleri oluşturuldu');
+                
+                startGame();
+                
+            } catch (error) {
+                addDebugLog('❌ HATA: ' + error.message);
+                console.error(error);
+            }
+        }
+        
+        // =============================================
+        // THREE.JS KURULUMU
+        // =============================================
+        
+        function setupThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+            scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
+            
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.set(0, 10, 15);
+            camera.lookAt(0, 0, 0);
+            
+            const canvas = document.getElementById('gameCanvas');
+            renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas,
+                antialias: true 
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            
+            clock = new THREE.Clock();
+            
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(50, 50, 50);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.camera.left = -50;
+            directionalLight.shadow.camera.right = 50;
+            directionalLight.shadow.camera.top = 50;
+            directionalLight.shadow.camera.bottom = -50;
+            directionalLight.shadow.camera.near = 0.1;
+            directionalLight.shadow.camera.far = 200;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            scene.add(directionalLight);
+            
+            const groundGeometry = new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE);
+            const groundMaterial = new THREE.MeshStandardMaterial({
+                color: 0x2d5016,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+            ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            audioListener = new THREE.AudioListener();
+            camera.add(audioListener);
+            audioLoader = new THREE.AudioLoader();
+        }
+        
+        // =============================================
+        // EVENT LISTENERS
+        // =============================================
+        
+        function setupEventListeners() {
+            window.addEventListener('resize', onWindowResize);
+            
+            document.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+            
+            document.addEventListener('click', () => {
+                if (gameActive && !isPointerLocked) {
+                    document.body.requestPointerLock();
+                }
+            });
+            
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = document.pointerLockElement === document.body;
+            });
+            
+            document.addEventListener('mousemove', (e) => {
+                if (isPointerLocked) {
+                    mouseX += e.movementX * 0.002;
+                    mouseY -= e.movementY * 0.002;
+                    mouseY = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, mouseY));
+                }
+            });
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // =============================================
+        // ASSET YÜKLEME
+        // =============================================
+        
+        async function loadAllAssets() {
+            const loader = new THREE.GLTFLoader();
+            
+            loadedModels.player = await loadGLTF(loader, PATHS.models.player, 'Oyuncu');
+            loadedModels.tree = await loadGLTF(loader, PATHS.models.tree, 'Ağaç');
+            loadedModels.enemyCin = await loadGLTF(loader, PATHS.models.enemyCin, 'Orman Cini');
+            loadedModels.enemyKurt = await loadGLTF(loader, PATHS.models.enemyKurt, 'Gölge Kurdu');
+            loadedModels.gem = await loadGLTF(loader, PATHS.models.gem, 'Gem');
+            
+            sounds.gemCollect = await loadSound(PATHS.sounds.gemCollect, 'Gem Sesi');
+            sounds.damage = await loadSound(PATHS.sounds.damage, 'Hasar Sesi');
+            sounds.ambient = await loadSound(PATHS.sounds.ambient, 'Arkaplan Müziği');
+            sounds.win = await loadSound(PATHS.sounds.win, 'Kazanma Sesi');
+            sounds.gameOver = await loadSound(PATHS.sounds.gameOver, 'Kaybetme Sesi');
+        }
+        
+        function loadGLTF(loader, path, name) {
+            return new Promise((resolve) => {
+                addDebugLog(`📦 Yükleniyor: ${name}`);
+                
+                loader.load(
+                    path,
+                    (gltf) => {
+                        loadedAssets++;
+                        updateProgress(loadedAssets, totalAssets);
+                        addDebugLog(`✅ Yüklendi: ${name}`);
+                        resolve(gltf.scene);
+                    },
+                    (progress) => {
+                        if (progress.lengthComputable) {
+                            const percent = Math.floor((progress.loaded / progress.total) * 100);
+                            addDebugLog(`⏳ ${name}: ${percent}%`);
+                        }
+                    },
+                    (error) => {
+                        loadedAssets++;
+                        updateProgress(loadedAssets, totalAssets);
+                        addDebugLog(`⚠️ ${name} yüklenemedi, yedek kullanılacak`);
+                        console.warn(error);
+                        resolve(null);
+                    }
+                );
+            });
+        }
+        
+        function loadSound(path, name) {
+            return new Promise((resolve) => {
+                const sound = new THREE.Audio(audioListener);
+                
+                audioLoader.load(
+                    path,
+                    (buffer) => {
+                        loadedAssets++;
+                        updateProgress(loadedAssets, totalAssets);
+                        sound.setBuffer(buffer);
+                        addDebugLog(`🔊 Yüklendi: ${name}`);
+                        resolve(sound);
+                    },
+                    undefined,
+                    (error) => {
+                        loadedAssets++;
+                        updateProgress(loadedAssets, totalAssets);
+                        addDebugLog(`⚠️ ${name} yüklenemedi (Ses opsiyonel)`);
+                        resolve(null);
+                    }
+                );
+            });
+        }
+        
+        // =============================================
+        // OYUN NESNELERİNİ OLUŞTUR
+        // =============================================
+        
+        function createGameObjects() {
+            createPlayer();
+            createTrees();
+            createEnemies();
+            createGems();
+        }
+        
+        function createPlayer() {
+            if (loadedModels.player) {
+                player = loadedModels.player.clone();
+                scaleToSize(player, CONFIG.PLAYER_HEIGHT);
+            } else {
+                const geometry = new THREE.BoxGeometry(0.8, CONFIG.PLAYER_HEIGHT, 0.8);
+                const material = new THREE.MeshStandardMaterial({ color: 0x4169E1 });
+                player = new THREE.Mesh(geometry, material);
+            }
+            
+            player.position.set(0, CONFIG.PLAYER_HEIGHT / 2, 0);
+            player.castShadow = true;
+            player.traverse((child) => {
+                if (child.isMesh) child.castShadow = true;
+            });
+            
+            scene.add(player);
+            addDebugLog(`✅ Oyuncu oluşturuldu`);
+        }
+        
+        function createTrees() {
+            for (let i = 0; i < CONFIG.TREE_COUNT; i++) {
+                let tree;
+                
+                if (loadedModels.tree) {
+                    tree = loadedModels.tree.clone();
+                    scaleToSize(tree, 6);
+                } else {
+                    const trunk = new THREE.Mesh(
+                        new THREE.CylinderGeometry(0.4, 0.5, 4, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x4a3728 })
+                    );
+                    const leaves = new THREE.Mesh(
+                        new THREE.SphereGeometry(2.5, 8, 8),
+                        new THREE.MeshStandardMaterial({ color: 0x228B22 })
+                    );
+                    tree = new THREE.Group();
+                    trunk.position.y = 2;
+                    leaves.position.y = 5;
+                    tree.add(trunk);
+                    tree.add(leaves);
+                }
+                
+                tree.position.set(
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 20),
+                    0,
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 20)
+                );
+                
+                tree.castShadow = true;
+                tree.receiveShadow = true;
+                tree.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                
+                scene.add(tree);
+                trees.push(tree);
+            }
+            
+            addDebugLog(`✅ ${CONFIG.TREE_COUNT} ağaç oluşturuldu`);
+        }
+        
+        function createEnemies() {
+            for (let i = 0; i < CONFIG.ENEMY_COUNT; i++) {
+                const isCin = Math.random() > 0.5;
+                let enemy;
+                
+                if (isCin && loadedModels.enemyCin) {
+                    enemy = loadedModels.enemyCin.clone();
+                    scaleToSize(enemy, 1.2);
+                } else if (!isCin && loadedModels.enemyKurt) {
+                    enemy = loadedModels.enemyKurt.clone();
+                    scaleToSize(enemy, 1.5);
+                } else {
+                    const color = isCin ? 0x00ff00 : 0x666666;
+                    enemy = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.6, 16, 16),
+                        new THREE.MeshStandardMaterial({ color: color })
+                    );
+                }
+                
+                enemy.position.set(
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 30),
+                    0.6,
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 30)
+                );
+                
+                enemy.castShadow = true;
+                enemy.traverse((child) => {
+                    if (child.isMesh) child.castShadow = true;
+                });
+                
+                enemy.userData = {
+                    type: isCin ? 'cin' : 'kurt',
+                    velocity: new THREE.Vector3(
+                        (Math.random() - 0.5) * 2,
+                        0,
+                        (Math.random() - 0.5) * 2
+                    ),
+                    attackCooldown: 0
+                };
+                
+                scene.add(enemy);
+                enemies.push(enemy);
+            }
+            
+            addDebugLog(`✅ ${CONFIG.ENEMY_COUNT} düşman oluşturuldu`);
+        }
+        
+        function createGems() {
+            for (let i = 0; i < CONFIG.GEM_COUNT; i++) {
+                let gem;
+                
+                if (loadedModels.gem) {
+                    gem = loadedModels.gem.clone();
+                    scaleToSize(gem, 0.8);
+                } else {
+                    gem = new THREE.Mesh(
+                        new THREE.OctahedronGeometry(0.4),
+                        new THREE.MeshStandardMaterial({
+                            color: 0xFFD700,
+                            emissive: 0xFFD700,
+                            emissiveIntensity: 0.5,
+                            metalness: 0.8,
+                            roughness: 0.2
+                        })
+                    );
+                }
+                
+                gem.position.set(
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 20),
+                    0.8,
+                    (Math.random() - 0.5) * (CONFIG.WORLD_SIZE - 20)
+                );
+                
+                gem.castShadow = true;
+                gem.traverse((child) => {
+                    if (child.isMesh) child.castShadow = true;
+                });
+                
+                gem.userData = {
+                    value: Math.floor(Math.random() * 3) + 3,
+                    rotationSpeed: Math.random() * 0.05 + 0.02,
+                    floatOffset: Math.random() * Math.PI * 2
+                };
+                
+                scene.add(gem);
+                gems.push(gem);
+            }
+            
+            addDebugLog(`✅ ${CONFIG.GEM_COUNT} gem oluşturuldu`);
+        }
+        
+        function scaleToSize(object, targetHeight) {
+            const box = new THREE.Box3().setFromObject(object);
+            const size = box.getSize(new THREE.Vector3());
+            const scale = targetHeight / size.y;
+            object.scale.setScalar(scale);
+        }
+        
+        // =============================================
+        // OYUNU BAŞLAT
+        // =============================================
+        
+        function startGame() {
+            addDebugLog('🎮 Oyun başlatılıyor...');
+            
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('ui').style.display = 'block';
+            document.getElementById('instructions').style.display = 'block';
+            
+            if (sounds.ambient) {
+                sounds.ambient.setLoop(true);
+                sounds.ambient.setVolume(0.2);
+                sounds.ambient.play();
+            }
+            
+            gameActive = true;
+            addDebugLog('✅ Oyun başladı!');
+            animate();
+        }
+        
+        // =============================================
+        // OYUN DÖNGÜSÜ
+        // =============================================
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            if (!gameActive) {
+                renderer.render(scene, camera);
+                return;
+            }
+            
+            const delta = clock.getDelta();
+            
+            updatePlayer(delta);
+            updateEnemies(delta);
+            updateGems(delta);
+            updateCamera();
+            checkCollisions();
+            updateUI();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // =============================================
+        // OYUNCU GÜNCELLEMESİ
+        // =============================================
+        
+        function updatePlayer(delta) {
+            const speed = CONFIG.PLAYER_SPEED * delta;
+            
+            const forward = new THREE.Vector3();
+            const right = new THREE.Vector3();
+            
+            camera.getWorldDirection(forward);
+            forward.y = 0;
+            forward.normalize();
+            
+            right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
+            right.normalize();
+            
+            if (keys['w'] || keys['arrowup']) {
+                player.position.add(forward.multiplyScalar(speed));
+            }
+            if (keys['s'] || keys['arrowdown']) {
+                player.position.add(forward.multiplyScalar(-speed));
+            }
+            if (keys['a'] || keys['arrowleft']) {
+                player.position.add(right.multiplyScalar(-speed));
+            }
+            if (keys['d'] || keys['arrowright']) {
+                player.position.add(right.multiplyScalar(speed));
+            }
+            
+            if (keys[' '] && Math.abs(player.position.y - CONFIG.PLAYER_HEIGHT / 2) < 0.1) {
+                playerVelocity.y = CONFIG.JUMP_FORCE;
+            }
+            
+            playerVelocity.y -= CONFIG.GRAVITY * delta;
+            player.position.y += playerVelocity.y * delta;
+            
+            if (player.position.y < CONFIG.PLAYER_HEIGHT / 2) {
+                player.position.y = CONFIG.PLAYER_HEIGHT / 2;
+                playerVelocity.y = 0;
+            }
+            
+            const halfWorld = CONFIG.WORLD_SIZE / 2 - 2;
+            player.position.x = Math.max(-halfWorld, Math.min(halfWorld, player.position.x));
+            player.position.z = Math.max(-halfWorld, Math.min(halfWorld, player.position.z));
+        }
+        
+        // =============================================
+        // DÜŞMAN GÜNCELLEMESİ
+        // =============================================
+        
+        function updateEnemies(delta) {
+            enemies.forEach((enemy) => {
+                const distanceToPlayer = enemy.position.distanceTo(player.position);
+                
+                if (distanceToPlayer < CONFIG.ENEMY_DETECTION_RANGE) {
+                    const direction = new THREE.Vector3()
+                        .subVectors(player.position, enemy.position)
+                        .normalize();
+                    
+                    enemy.position.add(direction.multiplyScalar(CONFIG.ENEMY_SPEED * delta));
+                    enemy.lookAt(player.position);
+                } else {
+                    enemy.position.add(enemy.userData.velocity.clone().multiplyScalar(delta));
+                    
+                    const halfWorld = CONFIG.WORLD_SIZE / 2 - 5;
+                    if (Math.abs(enemy.position.x) > halfWorld) {
+                        enemy.userData.velocity.x *= -1;
+                    }
+                    if (Math.abs(enemy.position.z) > halfWorld) {
+                        enemy.userData.velocity.z *= -1;
+                    }
+                }
+                
+                if (enemy.userData.attackCooldown > 0) {
+                    enemy.userData.attackCooldown -= delta;
+                }
+            });
+        }
+        
+        // =============================================
+        // GEM GÜNCELLEMESİ
+        // =============================================
+        
+        function updateGems(delta) {
+            const time = clock.getElapsedTime();
+            
+            gems.forEach((gem) => {
+                gem.rotation.y += gem.userData.rotationSpeed;
+                
+                const floatHeight = Math.sin(time * 2 + gem.userData.floatOffset) * 0.2;
+                gem.position.y = 0.8 + floatHeight;
+            });
+        }
+        
+        // =============================================
+        // KAMERA GÜNCELLEMESİ
+        // =============================================
+        
+        function updateCamera() {
+            const cameraOffset = new THREE.Vector3(
+                Math.sin(mouseX) * 8,
+                5 + Math.sin(mouseY) * 3,
+                Math.cos(mouseX) * 8
+            );
+            
+            camera.position.copy(player.position).add(cameraOffset);
+            camera.lookAt(player.position);
+        }
+        
+        // =============================================
+        // ÇARPIŞMA KONTROLÜ
+        // =============================================
+        
+        function checkCollisions() {
+            // Gem Toplama
+            gems.forEach((gem, index) => {
+                const distance = gem.position.distanceTo(player.position);
+                
+                if (distance < CONFIG.COLLECTION_RANGE) {
+                    gemsCollected += gem.userData.value;
+                    
+                    if (sounds.gemCollect) {
+                        sounds.gemCollect.play();
+                    }
+                    
+                    scene.remove(gem);
+                    gems.splice(index, 1);
+                    
+                    if (gemsCollected >= CONFIG.WIN_SCORE) {
+                        winGame();
+                    }
+                }
+            });
+            
+            // Düşman Çarpışması
+            enemies.forEach((enemy) => {
+                const distance = enemy.position.distanceTo(player.position);
+                
+                if (distance < 1.5 && enemy.userData.attackCooldown <= 0) {
+                    health -= 10;
+                    enemy.userData.attackCooldown = 1.0;
+                    
+                    if (sounds.damage) {
+                        sounds.damage.play();
+                    }
+                    
+                    if (health <= 0) {
+                        loseGame();
+                    }
+                }
+            });
+        }
+        
+        // =============================================
+        // UI GÜNCELLEMESİ
+        // =============================================
+        
+        function updateUI() {
+            document.getElementById('healthText').textContent = Math.max(0, health);
+            document.getElementById('healthBar').style.width = Math.max(0, health) + '%';
+            document.getElementById('gemsText').textContent = gemsCollected;
+        }
+        
+        // =============================================
+        // OYUN BİTİŞ DURUMLARI
+        // =============================================
+        
+        function winGame() {
+            gameActive = false;
+            
+            if (sounds.ambient) {
+                sounds.ambient.stop();
+            }
+            
+            if (sounds.win) {
+                sounds.win.play();
+            }
+            
+            document.getElementById('gameWon').style.display = 'block';
+            document.getElementById('instructions').style.display = 'none';
+            
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+        }
+        
+        function loseGame() {
+            gameActive = false;
+            
+            if (sounds.ambient) {
+                sounds.ambient.stop();
+            }
+            
+            if (sounds.gameOver) {
+                sounds.gameOver.play();
+            }
+            
+            document.getElementById('finalScore').textContent = gemsCollected;
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('instructions').style.display = 'none';
+            
+            if (document.pointerLockElement) {
+                document.exitPointerLock();
+            }
+        }
+        
+        // =============================================
+        // OYUNU BAŞLAT
+        // =============================================
+        
+        window.addEventListener('load', () => {
+            init();
+        });
+    </script>
 </body>
 </html>
