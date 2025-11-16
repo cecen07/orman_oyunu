@@ -186,6 +186,120 @@
             font-weight: bold;
             color: #4CAF50;
         }
+        
+        /* Mobil Kontroller */
+        #mobileControls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 250px;
+            display: none;
+            z-index: 150;
+            pointer-events: none;
+        }
+        
+        #joystick {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            width: 150px;
+            height: 150px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 3px solid rgba(76, 175, 80, 0.6);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+        
+        #joystickKnob {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(76, 175, 80, 0.8);
+            border: 3px solid #4CAF50;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        #jumpButton {
+            position: absolute;
+            bottom: 40px;
+            right: 40px;
+            width: 80px;
+            height: 80px;
+            background: rgba(76, 175, 80, 0.8);
+            border: 3px solid #4CAF50;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            color: white;
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        #jumpButton:active {
+            background: rgba(76, 175, 80, 1);
+            transform: scale(0.95);
+        }
+        
+        #cameraButton {
+            position: absolute;
+            bottom: 140px;
+            right: 40px;
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 193, 7, 0.8);
+            border: 3px solid #FFC107;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            pointer-events: auto;
+            touch-action: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        #touchCameraArea {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 40%;
+            height: 70%;
+            z-index: 140;
+            pointer-events: auto;
+            touch-action: none;
+        }
+        
+        @media (max-width: 768px) {
+            #mobileControls {
+                display: block;
+            }
+            
+            #ui {
+                font-size: 14px;
+                padding: 15px;
+            }
+            
+            .health-bar {
+                width: 150px;
+                height: 20px;
+            }
+            
+            #instructions {
+                font-size: 14px;
+                padding: 15px 20px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -362,8 +476,8 @@
         
         function setupThreeJS() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
+            scene.background = new THREE.Color(0xADD8E6); // Daha açık mavi gökyüzü
+            scene.fog = new THREE.Fog(0xADD8E6, 40, 120);
             
             camera = new THREE.PerspectiveCamera(
                 75,
@@ -386,11 +500,13 @@
             
             clock = new THREE.Clock();
             
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // Gündüz aydınlatması - Daha parlak ambient ışık
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
             scene.add(ambientLight);
             
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(50, 50, 50);
+            // Ana güneş ışığı - Çok daha güçlü
+            const directionalLight = new THREE.DirectionalLight(0xFFFFDD, 1.2);
+            directionalLight.position.set(50, 100, 30);
             directionalLight.castShadow = true;
             directionalLight.shadow.camera.left = -50;
             directionalLight.shadow.camera.right = 50;
@@ -402,11 +518,21 @@
             directionalLight.shadow.mapSize.height = 2048;
             scene.add(directionalLight);
             
+            // Ek dolgu ışığı - Gölgeleri yumuşatır
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            fillLight.position.set(-30, 40, -30);
+            scene.add(fillLight);
+            
+            // Hemisphere ışık - Doğal gökyüzü aydınlatması
+            const hemisphereLight = new THREE.HemisphereLight(0xADD8E6, 0x7EC850, 0.6);
+            scene.add(hemisphereLight);
+            
+            // Daha yeşil ve parlak zemin
             const groundGeometry = new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE);
             const groundMaterial = new THREE.MeshStandardMaterial({
-                color: 0x2d5016,
-                roughness: 0.9,
-                metalness: 0.1
+                color: 0x4CAF50, // Daha parlak yeşil
+                roughness: 0.8,
+                metalness: 0.0
             });
             ground = new THREE.Mesh(groundGeometry, groundMaterial);
             ground.rotation.x = -Math.PI / 2;
@@ -768,17 +894,34 @@
             right.crossVectors(forward, new THREE.Vector3(0, 1, 0));
             right.normalize();
             
+            let moved = false;
+            const moveDirection = new THREE.Vector3();
+            
             if (keys['w'] || keys['arrowup']) {
-                player.position.add(forward.multiplyScalar(speed));
+                moveDirection.add(forward);
+                moved = true;
             }
             if (keys['s'] || keys['arrowdown']) {
-                player.position.add(forward.multiplyScalar(-speed));
+                moveDirection.add(forward.clone().multiplyScalar(-1));
+                moved = true;
             }
             if (keys['a'] || keys['arrowleft']) {
-                player.position.add(right.multiplyScalar(-speed));
+                moveDirection.add(right.clone().multiplyScalar(-1));
+                moved = true;
             }
             if (keys['d'] || keys['arrowright']) {
-                player.position.add(right.multiplyScalar(speed));
+                moveDirection.add(right);
+                moved = true;
+            }
+            
+            // Hareket varsa karakteri yönlendir ve hareket ettir
+            if (moved) {
+                moveDirection.normalize();
+                player.position.add(moveDirection.multiplyScalar(speed));
+                
+                // Karakteri hareket yönüne döndür
+                const targetRotation = Math.atan2(moveDirection.x, moveDirection.z);
+                player.rotation.y = targetRotation;
             }
             
             if (keys[' '] && Math.abs(player.position.y - CONFIG.PLAYER_HEIGHT / 2) < 0.1) {
