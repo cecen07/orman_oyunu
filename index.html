@@ -308,12 +308,12 @@
                     }
                 });
 
-                // Yükleme ekranını gizle
-                setTimeout(() => {
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('ui').style.display = 'block';
-                    document.getElementById('instructions').style.display = 'block';
-                }, 500);
+                // Yükleme ekranını gizle ve oyunu başlat
+                console.log('🎮 Tüm assetler hazır, oyun başlatılıyor!');
+                
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('ui').style.display = 'block';
+                document.getElementById('instructions').style.display = 'block';
 
                 // Arkaplan müziği başlat
                 if (sounds.ambient) {
@@ -748,4 +748,4 @@
         function updateUI() {
             document.getElementById('healthText').textContent = Math.max(0, Math.floor(health));
             document.getElementById('healthBar').style.width = Math.max(0, health) + '%';
-            document.getElementById('gemsText').textContent = gems
+            document.getElementById('gemsText').textContent = gemsCollected;
